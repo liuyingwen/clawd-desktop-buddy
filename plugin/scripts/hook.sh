@@ -25,6 +25,10 @@ case "$EVENT" in
   *)                  exit 0 ;;
 esac
 
-# 1 second timeout protects against FIFO with no reader (daemon died mid-event).
-timeout 1 bash -c "echo '{\"state\":\"$STATE\",\"event\":\"$EVENT\",\"tool\":\"$TOOL\"}' > '$FIFO'" || true
+# Open FIFO in read-write mode so the write doesn't block when no reader is
+# attached (e.g. daemon died mid-event). printf %s avoids shell-quote injection
+# from tool names like "Edit's" that could break a naive double-quoted echo.
+exec 3<>"$FIFO"
+printf '{"state":"%s","event":"%s","tool":"%s"}\n' "$STATE" "$EVENT" "$TOOL" >&3
+exec 3>&-
 exit 0
