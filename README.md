@@ -1,136 +1,125 @@
 # clawd-mood
 
-ESP32-C3 desk mascot that shows 7 pixel-eye expressions reflecting Claude Code state, over USB serial.
+## 烧录
 
-Built on [clawd-mochi](../projects/clawd-mochi/) hardware + [claudigotchi](../projects/claudigotchi/)-style plugin architecture.
-
-## What it does
-
-A Claude Code plugin hooks into session events and pipes the current state to an ESP32-C3 over USB serial. The ESP32 drives a 1.54" ST7789 TFT showing pixel-eye expressions:
-
-| State           | Trigger                              | Look                                   |
-| --------------- | ------------------------------------ | -------------------------------------- |
-| Idle            | SessionStart, Stop after 3s, boot    | Normal eyes, slow wiggle + blink       |
-| Thinking        | UserPromptSubmit                     | Eyes cycle up/left/right/center        |
-| Working         | PreToolUse/PostToolUse/Subagent*     | Jitter + animated dots                 |
-| Waiting         | Notification (Claude wants input)    | Wide eyes bouncing + `?`               |
-| Done            | Stop (3s transient)                  | Squish smile `> <`                     |
-| Error           | PostToolUseFailure                   | Asymmetric jittery eyes                |
-| Sleeping        | 5 minutes of no events               | Closed-line eyes + floating `Z`        |
-
-Any incoming state message wakes the device.
-
-## Hardware
-
-Identical to [clawd-mochi](../projects/clawd-mochi/):
-
-| Part                | Spec                       |
-| ------------------- | -------------------------- |
-| ESP32-C3 Super Mini | with USB-C                 |
-| ST7789 1.54" TFT    | 240×240 SPI                |
-| Jumper wires ×8     | 8–10 cm                    |
-| USB-C cable         | for data + power           |
-
-### Wiring
-
-| Display pin | ESP32-C3 GPIO  |
-| ----------- | -------------- |
-| VCC         | 3V3            |
-| GND         | GND            |
-| SDA         | GPIO 10 (MOSI) |
-| SCL         | GPIO 8  (SCK)  |
-| RES         | GPIO 2         |
-| DC          | GPIO 1         |
-| CS          | GPIO 4         |
-| BL          | GPIO 3         |
-
-⚠️ Connect VCC to **3.3V only** — never 5V.
-
-## Setup
-
-### Prerequisites
-
-- macOS
-- [uv](https://docs.astral.sh/uv/) — `brew install uv`
-- jq — `brew install jq`
-- Arduino IDE 2.x with the [ESP32 board package](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html)
-- Arduino libraries (Library Manager): **Adafruit GFX Library**, **Adafruit ST7735 and ST7789 Library**, **ArduinoJson**
-
-### 1. Flash the firmware
-
-Open `firmware/clawd_mood/clawd_mood.ino` in Arduino IDE.
-
-Tools → Board → **ESP32C3 Dev Module**. Then:
-
-| Setting           | Value                  |
-| ----------------- | ---------------------- |
-| USB CDC On Boot   | **Enabled** ← required |
-| CPU Frequency     | 160 MHz                |
-| Upload Speed      | 921600                 |
-
-Pick the right Port, then Upload.
-
-### 2. Start the daemon
+### 1. 安装工具
 
 ```bash
+brew install arduino-cli uv jq
+```
+
+### 2. 安装 ESP32 板支持
+
+```bash
+arduino-cli config init --overwrite
+arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+```
+
+### 3. 安装 Arduino 库
+
+```bash
+arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library" "ArduinoJson"
+```
+
+### 4. 接线（VCC 接 3.3V，**不要接 5V**）
+
+| Display | ESP32-C3 |
+| ------- | -------- |
+| VCC     | 3V3      |
+| GND     | GND      |
+| SDA     | GPIO 10  |
+| SCL     | GPIO 8   |
+| RES     | GPIO 2   |
+| DC      | GPIO 1   |
+| CS      | GPIO 4   |
+| BL      | GPIO 3   |
+
+### 5. 编译 + 烧录
+
+把板子用 USB-C 插到 Mac 上，确认串口存在：
+
+```bash
+ls /dev/cu.usbmodem*
+```
+
+进入项目目录，编译 + 烧录：
+
+```bash
+cd /path/to/clawd-mood
+arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
+arduino-cli upload -p /dev/cu.usbmodem101 -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
+```
+
+如果串口名不是 `usbmodem101`，把 `-p` 后面换成实际的。
+
+---
+
+## 使用
+
+### 1. 启动 daemon
+
+```bash
+cd /path/to/clawd-mood
 chmod +x plugin/scripts/daemon.py
 ./plugin/scripts/daemon.py
 ```
 
-Keep it running. First run, uv will auto-install pyserial into a managed environment.
+首次启动 uv 会自动装 pyserial。看到下面就绪：
 
-Override the serial port with `CLAWD_MOOD_PORT=/dev/cu.usbmodemXXX ./plugin/scripts/daemon.py` if needed.
+```
+clawd-mood daemon started
+  FIFO:   /tmp/clawd-mood.fifo
+  Serial: /dev/cu.usbmodem101
+  Ready!
+```
 
-### 3. Launch Claude Code with the plugin
+让它一直挂着。
+
+### 2. 启动 Claude Code
+
+新开一个终端：
 
 ```bash
-claude --plugin-dir /absolute/path/to/clawd-mood/plugin
+claude --plugin-dir /path/to/clawd-mood/plugin
 ```
 
-Optional permanent alias:
+或者加 alias 永久挂载：
+
 ```bash
-alias claude='claude --plugin-dir /absolute/path/to/clawd-mood/plugin'
+alias claude='claude --plugin-dir /path/to/clawd-mood/plugin'
 ```
 
-### 4. Verify
+启动后在 Claude Code 里运行 `/hooks`，确认 9 个事件全挂上了。
 
-Run `/hooks` inside Claude Code. You should see all 9 hook events registered to `clawd-mood`. The display should already be on `thinking`.
+### 3. 表情对照
 
-## Serial protocol
+| 状态     | 触发                        |
+| -------- | --------------------------- |
+| Idle     | 会话开始 / Stop 后 3 秒回归 |
+| Thinking | 提交 prompt                 |
+| Working  | 调用工具                    |
+| Waiting  | Claude 等你输入             |
+| Done     | 回答完成（3 秒瞬态）        |
+| Error    | 工具失败                    |
+| Sleeping | 5 分钟无事件                |
 
-Newline-delimited JSON at 115200 baud, single direction (Mac → ESP32). Minimum message:
+### 4. 手动测试（不依赖 Claude Code）
 
-```json
-{"state":"working"}
-```
-
-Optional debug fields:
-
-```json
-{"state":"working","event":"PreToolUse","tool":"Bash"}
-```
-
-Accepted states: `idle | thinking | working | waiting | done | error | sleeping`.
-
-## Manual testing without Claude Code
-
-With the daemon running:
+Daemon 跑着，往 FIFO 灌 JSON：
 
 ```bash
 echo '{"state":"working"}' > /tmp/clawd-mood.fifo
 echo '{"state":"done"}'    > /tmp/clawd-mood.fifo
 ```
 
-Or open Arduino Serial Monitor at 115200 baud with line ending = Newline and type JSON directly.
+---
 
-## Architecture
+## 故障排除
 
-```
-Claude Code → hook.sh → /tmp/clawd-mood.fifo → daemon.py → USB serial → ESP32-C3
-```
-
-See `docs/superpowers/specs/2026-06-07-clawd-mood-design.md` for the full design.
-
-## License
-
-MIT
+- **屏幕不亮**：检查接线，特别是 VCC 是不是接到 3V3 而不是 5V
+- **屏幕方向不对**：改 `firmware/clawd_mood/clawd_mood.ino` 里 `tft.setRotation(1)` 换成 0/2/3 重烧
+- **`No /dev/cu.usbmodem*`**：板子没插好，或者 USB 数据线只能充电不能传输
+- **Daemon 日志不刷新**：用 `PYTHONUNBUFFERED=1 ./plugin/scripts/daemon.py` 启动
+- **多个 ESP32 同时插**：`CLAWD_MOOD_PORT=/dev/cu.usbmodemXXX ./plugin/scripts/daemon.py` 指定端口
