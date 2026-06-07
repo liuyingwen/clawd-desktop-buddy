@@ -261,13 +261,37 @@ void drawWaiting() {
   }
 }
 
+void drawDone() {
+  static unsigned long enteredAt = 0;
+  static uint8_t phase = 0;
+  unsigned long now = millis();
+  if (moodDirty) {
+    enteredAt = now;
+    phase = 0;
+    moodDirty = false;
+  }
+  unsigned long elapsed = now - enteredAt;
+  // First 1000ms: alternate squish/closed every 150ms for celebration
+  // After 1000ms: steady squish
+  if (elapsed < 1000) {
+    uint8_t newPhase = (elapsed / 150) % 2;
+    if (newPhase != phase) {
+      drawSquishEyes(newPhase == 1);
+      phase = newPhase;
+    }
+  } else if (phase != 99) {
+    drawSquishEyes(false);
+    phase = 99;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
     case MOOD_THINKING: drawThinking(); break;
     case MOOD_WORKING:  drawWorking(); break;
     case MOOD_WAITING:  drawWaiting(); break;
-    case MOOD_DONE:     drawSquishEyes(false); moodDirty = false; break;  // placeholder
+    case MOOD_DONE: drawDone(); break;
     case MOOD_ERROR:    drawNormalEyes(0); moodDirty = false; break;  // placeholder
     case MOOD_SLEEPING: drawNormalEyes(0, true); moodDirty = false; break;  // placeholder
     default: break;
