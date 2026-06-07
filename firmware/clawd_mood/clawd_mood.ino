@@ -285,6 +285,22 @@ void drawDone() {
   }
 }
 
+void drawError() {
+  static unsigned long lastStep = 0;
+  unsigned long now = millis();
+  if (moodDirty || now - lastStep > 80) {
+    tft.fillScreen(bgColor);
+    int16_t lx = eyeLX(0), rx = eyeRX(0), ey = eyeY();
+    // Jittery, asymmetric: random small offset, left eye lower than right
+    int16_t jx = ((now / 80) * 17) % 5 - 2;
+    int16_t jy = ((now / 80) * 31) % 5 - 2;
+    tft.fillRect(lx + jx, ey + 6 + jy, EYE_W, EYE_H - 6, C_BLACK);
+    tft.fillRect(rx - jx, ey - 6 + jy, EYE_W, EYE_H - 6, C_BLACK);
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
@@ -292,7 +308,7 @@ void renderMood() {
     case MOOD_WORKING:  drawWorking(); break;
     case MOOD_WAITING:  drawWaiting(); break;
     case MOOD_DONE: drawDone(); break;
-    case MOOD_ERROR:    drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_ERROR: drawError(); break;
     case MOOD_SLEEPING: drawNormalEyes(0, true); moodDirty = false; break;  // placeholder
     default: break;
   }
