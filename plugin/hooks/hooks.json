@@ -1,0 +1,49 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "UserPromptSubmit": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "PreToolUse": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "PostToolUse": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "Notification": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "Stop": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "SubagentStart": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ],
+    "SubagentStop": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh", "async": true }
+      ]}
+    ]
+  }
+}
