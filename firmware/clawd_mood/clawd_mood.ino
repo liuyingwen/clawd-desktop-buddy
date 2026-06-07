@@ -192,10 +192,33 @@ void drawIdle() {
   }
 }
 
+void drawThinking() {
+  static uint8_t phase = 0;
+  static unsigned long lastStep = 0;
+  unsigned long now = millis();
+  // Loop: up → left → right → center, 600ms each
+  if (moodDirty || now - lastStep > 600) {
+    tft.fillScreen(bgColor);
+    int16_t lx = eyeLX(0), rx = eyeRX(0), ey = eyeY();
+    int16_t dx = 0, dy = 0;
+    switch (phase % 4) {
+      case 0: dx = 0;  dy = -8; break; // up
+      case 1: dx = -8; dy = 0;  break; // left
+      case 2: dx = 8;  dy = 0;  break; // right
+      case 3: dx = 0;  dy = 0;  break; // center
+    }
+    tft.fillRect(lx + dx, ey + dy, EYE_W, EYE_H, C_BLACK);
+    tft.fillRect(rx + dx, ey + dy, EYE_W, EYE_H, C_BLACK);
+    phase++;
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
-    case MOOD_THINKING: drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_THINKING: drawThinking(); break;
     case MOOD_WORKING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
     case MOOD_WAITING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
     case MOOD_DONE:     drawSquishEyes(false); moodDirty = false; break;  // placeholder
