@@ -301,6 +301,29 @@ void drawError() {
   }
 }
 
+void drawSleeping() {
+  static unsigned long lastStep = 0;
+  static uint8_t zPhase = 0;
+  unsigned long now = millis();
+  if (moodDirty || now - lastStep > 500) {
+    tft.fillScreen(bgColor);
+    int16_t lx = eyeLX(0), rx = eyeRX(0), cy = eyeCY();
+    // Closed eyes: thin horizontal bars
+    tft.fillRect(lx, cy - 2, EYE_W, 4, C_BLACK);
+    tft.fillRect(rx, cy - 2, EYE_W, 4, C_BLACK);
+    // Floating Z: 3 positions, rising
+    tft.setTextColor(C_BLACK);
+    tft.setTextSize(2);
+    int16_t zy[] = {170, 150, 130};
+    int16_t zx[] = {140, 150, 160};
+    tft.setCursor(zx[zPhase % 3], zy[zPhase % 3]);
+    tft.print("Z");
+    zPhase++;
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
@@ -309,7 +332,7 @@ void renderMood() {
     case MOOD_WAITING:  drawWaiting(); break;
     case MOOD_DONE: drawDone(); break;
     case MOOD_ERROR: drawError(); break;
-    case MOOD_SLEEPING: drawNormalEyes(0, true); moodDirty = false; break;  // placeholder
+    case MOOD_SLEEPING: drawSleeping(); break;
     default: break;
   }
 }
