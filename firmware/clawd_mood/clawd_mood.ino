@@ -172,14 +172,37 @@ void pollSerial() {
   }
 }
 
-void renderMoodText() {
-  if (!moodDirty) return;
-  tft.fillScreen(ST77XX_BLACK);
-  tft.setTextColor(ST77XX_WHITE);
-  tft.setTextSize(3);
-  tft.setCursor(20, 100);
-  tft.print(moodName(currentMood));
-  moodDirty = false;
+// ── Per-mood renderers ──────────────────────────────────────────
+// Each renderer is called every frame (~33fps). They use a static
+// frame counter for animation. They redraw only when needed.
+
+void drawIdle() {
+  static uint8_t step = 0;
+  static unsigned long lastStep = 0;
+  unsigned long now = millis();
+  // Slow wiggle: every 800ms, cycle through 5 horizontal offsets
+  if (moodDirty || now - lastStep > 800) {
+    const int16_t offs[] = {0, -4, 0, 4, 0};
+    // Blink every ~3.2s (every 4th step)
+    bool blink = (step % 4 == 0) && (step != 0);
+    drawNormalEyes(offs[step % 5], blink);
+    step++;
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
+void renderMood() {
+  switch (currentMood) {
+    case MOOD_IDLE:     drawIdle(); break;
+    case MOOD_THINKING: drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_WORKING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_WAITING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_DONE:     drawSquishEyes(false); moodDirty = false; break;  // placeholder
+    case MOOD_ERROR:    drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_SLEEPING: drawNormalEyes(0, true); moodDirty = false; break;  // placeholder
+    default: break;
+  }
 }
 
 void setup() {
@@ -196,6 +219,6 @@ void setup() {
 void loop() {
   pollSerial();
   tickMoodMachine();
-  renderMoodText();
+  renderMood();
   delay(30);
 }
