@@ -108,7 +108,7 @@ void setup() {
   SPI.begin(8, -1, 10, TFT_CS);   // SCK=8, MOSI=10 (ESP32-C3 pin remap)
   tft.setSPISpeed(40000000);
   tft.init(DISP_W, DISP_H);
-  tft.setRotation(2);
+  tft.setRotation(1);
   tft.fillScreen(ST77XX_BLACK);
 
   tft.setTextColor(ST77XX_WHITE);
@@ -257,7 +257,7 @@ void setup() {
   SPI.begin(8, -1, 10, TFT_CS);   // SCK=8, MOSI=10 (ESP32-C3 pin remap)
   tft.setSPISpeed(40000000);
   tft.init(DISP_W, DISP_H);
-  tft.setRotation(2);
+  tft.setRotation(1);
   lastEventMs = millis();
 }
 
@@ -444,7 +444,7 @@ void drawSquishEyes(bool closed = false) {
 
 - [ ] **Step 4: Call `initColors()` in `setup()` after `tft.init`**
 
-In `setup()`, after `tft.setRotation(2);`, add:
+In `setup()`, after `tft.setRotation(1);`, add:
 
 ```cpp
   initColors();
