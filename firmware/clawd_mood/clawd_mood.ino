@@ -215,11 +215,35 @@ void drawThinking() {
   }
 }
 
+void drawWorking() {
+  static uint8_t dots = 0;
+  static unsigned long lastStep = 0;
+  unsigned long now = millis();
+  if (moodDirty || now - lastStep > 300) {
+    tft.fillScreen(bgColor);
+    int16_t lx = eyeLX(0), rx = eyeRX(0), ey = eyeY();
+    // Slight focused twitch: 2px random jitter on each eye
+    int16_t jx = (now / 100) % 3 - 1;  // -1, 0, 1
+    tft.fillRect(lx + jx, ey, EYE_W, EYE_H, C_BLACK);
+    tft.fillRect(rx - jx, ey, EYE_W, EYE_H, C_BLACK);
+    // Bottom: . / .. / ... cycle
+    tft.setTextColor(C_BLACK);
+    tft.setTextSize(3);
+    tft.setCursor(95, 180);
+    if      (dots % 3 == 0) tft.print(".");
+    else if (dots % 3 == 1) tft.print("..");
+    else                    tft.print("...");
+    dots++;
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
     case MOOD_THINKING: drawThinking(); break;
-    case MOOD_WORKING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_WORKING:  drawWorking(); break;
     case MOOD_WAITING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
     case MOOD_DONE:     drawSquishEyes(false); moodDirty = false; break;  // placeholder
     case MOOD_ERROR:    drawNormalEyes(0); moodDirty = false; break;  // placeholder
