@@ -28,6 +28,8 @@ void setup() {
   pinMode(TFT_BLK, OUTPUT);
   digitalWrite(TFT_BLK, HIGH);
 
+  SPI.begin(8, -1, 10, TFT_CS);   // SCK=8, MOSI=10 (ESP32-C3 pin remap)
+  tft.setSPISpeed(40000000);
   tft.init(DISP_W, DISP_H);
   tft.setRotation(2);
   tft.fillScreen(ST77XX_BLACK);
