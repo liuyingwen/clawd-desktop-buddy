@@ -1,0 +1,28 @@
+# Claude Code
+.claude/
+
+# Arduino IDE build output
+build/
+*.elf
+*.bin
+*.map
+*.hex
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
