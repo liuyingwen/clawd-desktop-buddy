@@ -239,12 +239,34 @@ void drawWorking() {
   }
 }
 
+void drawWaiting() {
+  static uint8_t step = 0;
+  static unsigned long lastStep = 0;
+  unsigned long now = millis();
+  if (moodDirty || now - lastStep > 250) {
+    tft.fillScreen(bgColor);
+    int16_t lx = eyeLX(0), rx = eyeRX(0), ey = eyeY();
+    int16_t bounce = (step % 4 < 2) ? -6 : 6;
+    // Slightly bigger eyes for "wide open" look
+    int16_t eh = EYE_H + 6;
+    tft.fillRect(lx, ey + bounce - 3, EYE_W, eh, C_BLACK);
+    tft.fillRect(rx, ey + bounce - 3, EYE_W, eh, C_BLACK);
+    tft.setTextColor(C_BLACK);
+    tft.setTextSize(4);
+    tft.setCursor(105, 185);
+    tft.print("?");
+    step++;
+    lastStep = now;
+    moodDirty = false;
+  }
+}
+
 void renderMood() {
   switch (currentMood) {
     case MOOD_IDLE:     drawIdle(); break;
     case MOOD_THINKING: drawThinking(); break;
     case MOOD_WORKING:  drawWorking(); break;
-    case MOOD_WAITING:  drawNormalEyes(0); moodDirty = false; break;  // placeholder
+    case MOOD_WAITING:  drawWaiting(); break;
     case MOOD_DONE:     drawSquishEyes(false); moodDirty = false; break;  // placeholder
     case MOOD_ERROR:    drawNormalEyes(0); moodDirty = false; break;  // placeholder
     case MOOD_SLEEPING: drawNormalEyes(0, true); moodDirty = false; break;  // placeholder
