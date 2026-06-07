@@ -14,6 +14,9 @@
 #define DISP_W 240
 #define DISP_H 240
 
+#define DONE_REVERT_MS    3000UL          // Done → Idle after 3s
+#define SLEEP_IDLE_MS     (5UL*60*1000)   // 5 minutes
+
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
 enum Mood {
@@ -57,6 +60,16 @@ void setMood(Mood m) {
   currentMood = m;
   moodDirty = true;
   if (m == MOOD_DONE) doneEnteredMs = millis();
+}
+
+void tickMoodMachine() {
+  unsigned long now = millis();
+  if (currentMood == MOOD_DONE && now - doneEnteredMs > DONE_REVERT_MS) {
+    setMood(MOOD_IDLE);
+  }
+  if (currentMood != MOOD_SLEEPING && now - lastEventMs > SLEEP_IDLE_MS) {
+    setMood(MOOD_SLEEPING);
+  }
 }
 
 void handleLine(const String& line) {
@@ -112,6 +125,7 @@ void setup() {
 
 void loop() {
   pollSerial();
+  tickMoodMachine();
   renderMoodText();
   delay(30);
 }
