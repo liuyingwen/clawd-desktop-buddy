@@ -17,6 +17,20 @@
 #define DONE_REVERT_MS    3000UL          // Done → Idle after 3s
 #define SLEEP_IDLE_MS     (5UL*60*1000)   // 5 minutes
 
+// Eye geometry (shared with clawd-mochi)
+#define EYE_W   30
+#define EYE_H   60
+#define EYE_GAP 120
+#define EYE_OX  0
+#define EYE_OY  40
+
+// Colors
+uint16_t C_ORANGE, C_DARKBG, C_MUTED;
+#define C_WHITE ST77XX_WHITE
+#define C_BLACK ST77XX_BLACK
+
+uint16_t bgColor = 0;  // initialized in initColors()
+
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
 enum Mood {
@@ -29,6 +43,61 @@ unsigned long lastEventMs = 0;
 unsigned long doneEnteredMs = 0;
 bool moodDirty = true;
 String serialBuf;
+
+void initColors() {
+  C_ORANGE = tft.color565(218, 17, 0);
+  C_DARKBG = tft.color565(10, 12, 16);
+  C_MUTED  = tft.color565(90, 88, 86);
+  bgColor  = C_ORANGE;
+}
+
+inline int16_t eyeLX(int16_t ox) {
+  return (DISP_W - (EYE_W * 2 + EYE_GAP)) / 2 + EYE_OX + ox;
+}
+inline int16_t eyeRX(int16_t ox) { return eyeLX(ox) + EYE_W + EYE_GAP; }
+inline int16_t eyeY()            { return (DISP_H - EYE_H) / 2 - EYE_OY; }
+inline int16_t eyeCY()           { return eyeY() + EYE_H / 2; }
+
+void drawNormalEyes(int16_t ox = 0, bool blink = false) {
+  tft.fillScreen(bgColor);
+  const int16_t lx = eyeLX(ox), rx = eyeRX(ox), ey = eyeY();
+  if (!blink) {
+    tft.fillRect(lx, ey, EYE_W, EYE_H, C_BLACK);
+    tft.fillRect(rx, ey, EYE_W, EYE_H, C_BLACK);
+  } else {
+    tft.fillRect(lx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
+    tft.fillRect(rx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
+  }
+}
+
+void drawChevron(int16_t cx, int16_t cy, int16_t arm, int16_t reach,
+                 uint8_t thk, bool rightFacing, uint16_t col) {
+  for (int8_t t = -(int8_t)thk; t <= (int8_t)thk; t++) {
+    if (rightFacing) {
+      tft.drawLine(cx - reach/2, cy - arm + t, cx + reach/2, cy + t,      col);
+      tft.drawLine(cx + reach/2, cy + t,       cx - reach/2, cy + arm + t, col);
+    } else {
+      tft.drawLine(cx + reach/2, cy - arm + t, cx - reach/2, cy + t,      col);
+      tft.drawLine(cx - reach/2, cy + t,       cx + reach/2, cy + arm + t, col);
+    }
+  }
+}
+
+void drawSquishEyes(bool closed = false) {
+  tft.fillScreen(bgColor);
+  const int16_t lx = eyeLX(0), rx = eyeRX(0), cy = eyeCY();
+  const int16_t arm   = EYE_H / 2;
+  const int16_t reach = EYE_W / 2;
+  const int16_t lcx   = lx + EYE_W / 2;
+  const int16_t rcx   = rx + EYE_W / 2;
+  if (!closed) {
+    drawChevron(lcx, cy, arm, reach, 10, true,  C_BLACK);
+    drawChevron(rcx, cy, arm, reach, 10, false, C_BLACK);
+  } else {
+    tft.fillRect(lx, cy - 5, EYE_W, 10, C_BLACK);
+    tft.fillRect(rx, cy - 5, EYE_W, 10, C_BLACK);
+  }
+}
 
 const char* moodName(Mood m) {
   switch (m) {
@@ -120,6 +189,7 @@ void setup() {
   tft.setSPISpeed(40000000);
   tft.init(DISP_W, DISP_H);
   tft.setRotation(2);
+  initColors();
   lastEventMs = millis();
 }
 
