@@ -50,12 +50,12 @@ def detect_port() -> str:
     candidates.sort()
     if not candidates:
         sys.exit(
-            "No ESP32-like USB CDC device found. "
-            "Plug it in or set CLAWD_MOOD_PORT=/dev/cu.xxx (or COM3 on Windows)."
+            "No ESP32-like USB CDC device found. Plug it in or set "
+            "CLAWD_MOOD_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
         )
     if len(candidates) > 1:
         print(
-            f"  warning: multiple devices {candidates}, using {candidates[0]}",
+            f"  warning: multiple devices found {candidates}, using {candidates[0]}",
             file=sys.stderr,
         )
     return candidates[0]
@@ -65,10 +65,11 @@ def open_serial(port: str) -> serial.Serial:
     ser = serial.Serial(
         port, BAUD_RATE, timeout=1, dsrdtr=False, rtscts=False,
     )
+    # Suppress reset on open
     ser.dtr = False
     ser.rts = False
     time.sleep(0.5)
-    ser.read(1000)
+    ser.read(1000)  # drain boot output
     time.sleep(1.0)
     ser.read(1000)
     return ser
@@ -76,6 +77,7 @@ def open_serial(port: str) -> serial.Serial:
 
 def bind_listen(preferred: int, env_forced: bool) -> tuple[socket.socket, int]:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind(("127.0.0.1", preferred))
     except OSError:
@@ -120,11 +122,11 @@ def main() -> None:
 
     serial_port = detect_port()
     ser = open_serial(serial_port)
-    print(f"clawd-mood daemon started")
+    print("clawd-mood daemon started")
     print(f"  TCP:    127.0.0.1:{actual_port}")
     print(f"  Portfile: {PORTFILE}")
     print(f"  Serial: {serial_port}")
-    print(f"  Ready!")
+    print("  Ready!")
 
     while True:
         conn, _ = server.accept()
