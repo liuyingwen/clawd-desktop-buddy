@@ -263,7 +263,11 @@ def main():
 
     serial_port = detect_port()
     ser = open_serial(serial_port)
-    print(f"clawd-mood daemon — listening 127.0.0.1:{actual_port}, serial {serial_port}")
+    print(f"clawd-mood daemon started")
+    print(f"  TCP:    127.0.0.1:{actual_port}")
+    print(f"  Portfile: {PORTFILE}")
+    print(f"  Serial: {serial_port}")
+    print(f"  Ready!")
 
     while True:
         conn, _ = server.accept()

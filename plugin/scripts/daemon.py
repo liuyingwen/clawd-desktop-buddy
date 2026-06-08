@@ -122,6 +122,7 @@ def main() -> None:
     ser = open_serial(serial_port)
     print(f"clawd-mood daemon started")
     print(f"  TCP:    127.0.0.1:{actual_port}")
+    print(f"  Portfile: {PORTFILE}")
     print(f"  Serial: {serial_port}")
     print(f"  Ready!")
 
