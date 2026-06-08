@@ -1,5 +1,9 @@
 # clawd-mood
 
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。
+
+> 仅 macOS。明确不做：WiFi 控制、OTA、launchd 自启、Windows/Linux 兼容、自动化单元测试。
+
 ## 烧录
 
 ### 1. 安装工具
@@ -107,6 +111,13 @@ codex plugin add clawd-mood@clawd-mood
 
 之后任意目录 `codex` 即可。在 codex 里 `/hooks` 确认 10 个事件全挂上。
 
+卸载：
+
+```bash
+codex plugin remove clawd-mood@clawd-mood
+codex plugin marketplace remove clawd-mood
+```
+
 > Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/scripts/hook.sh` 等源文件后需要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 才生效。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
 
 #### 同时挂
@@ -125,7 +136,31 @@ codex plugin add clawd-mood@clawd-mood
 | Error    | 工具失败（Claude Code 独有 PostToolUseFailure）                       |
 | Sleeping | 5 分钟无事件                                                          |
 
-### 4. 手动测试（不依赖 Claude Code）
+### 4. 快速验证
+
+挂载完，跑一个任意短任务（Claude Code 或 Codex 都行），观察屏幕表情序列：
+
+```
+Idle → Thinking → Working → Done → Idle（Done 3 秒后自动回 Idle）
+```
+
+Codex 特有事件验证：
+
+| 触发动作                  | 期望表情     | 对应事件             |
+| ------------------------- | ------------ | -------------------- |
+| codex 弹出命令批准提示    | Waiting      | `PermissionRequest`  |
+| codex `/compact` 压缩中   | Thinking     | `PreCompact`         |
+| codex 压缩完成            | Working      | `PostCompact`        |
+
+屏幕没动？看 daemon log：
+
+```bash
+tail -f /tmp/clawd-mood-daemon.log
+```
+
+每次事件应新增一行 `-> {"state":"...","event":"...","tool":"..."}`。
+
+### 5. 手动测试（不依赖 CLI）
 
 Daemon 跑着，往 FIFO 灌 JSON：
 
