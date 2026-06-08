@@ -104,8 +104,8 @@ def main() -> None:
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.3) as s:
             s.sendall(line.encode())
-    except (OSError, socket.timeout):
-        pass  # daemon died or rejected; silently drop
+    except OSError:
+        pass  # daemon not responding; silently drop
 
 
 if __name__ == "__main__":
