@@ -34,6 +34,9 @@ case "$EVENT" in
   Stop)               STATE="done" ;;
   SubagentStart)      STATE="working" ;;
   SubagentStop)       STATE="working" ;;
+  PermissionRequest)  STATE="waiting" ;;
+  PreCompact)         STATE="thinking" ;;
+  PostCompact)        STATE="working" ;;
   *)                  exit 0 ;;
 esac
 
