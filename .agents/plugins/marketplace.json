@@ -1,0 +1,15 @@
+{
+  "name": "clawd-mood",
+  "interface": {
+    "displayName": "clawd-mood"
+  },
+  "plugins": [
+    {
+      "name": "clawd-mood",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      }
+    }
+  ]
+}
