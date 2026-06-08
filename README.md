@@ -87,17 +87,26 @@ clawd-mood daemon started
 
 #### Claude Code
 
+推荐：**marketplace install**（一次注册，全局生效，写入 `~/.claude/settings.json` 的 `enabledPlugins`）：
+
+```bash
+cd /path/to/clawd-mood
+claude plugin marketplace add .
+claude plugin install clawd-mood@clawd-mood
+```
+
+之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 9 个事件全挂上。卸载：
+
+```bash
+claude plugin uninstall clawd-mood@clawd-mood
+claude plugin marketplace remove clawd-mood
+```
+
+临时/开发用 `--plugin-dir`（不写 settings.json，只对当前会话生效）：
+
 ```bash
 claude --plugin-dir /path/to/clawd-mood/plugin
 ```
-
-或永久 alias：
-
-```bash
-alias claude='claude --plugin-dir /path/to/clawd-mood/plugin'
-```
-
-启动后 `/hooks` 确认 9 个事件全挂上。
 
 #### Codex CLI（≥ 0.133.0）
 

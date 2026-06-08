@@ -1,0 +1,14 @@
+{
+  "name": "clawd-mood",
+  "description": "Local marketplace for the clawd-mood Claude Code plugin.",
+  "owner": { "name": "liuyingwen" },
+  "plugins": [
+    {
+      "name": "clawd-mood",
+      "description": "Drives a clawd-mood ESP32-C3 desk mascot via USB serial, reflecting Claude Code state on a TFT display.",
+      "version": "0.1.0",
+      "author": { "name": "liuyingwen" },
+      "source": "./plugin"
+    }
+  ]
+}
