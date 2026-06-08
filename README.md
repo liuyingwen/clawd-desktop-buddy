@@ -2,7 +2,7 @@
 
 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。
 
-> 仅 macOS。明确不做：WiFi 控制、OTA、launchd 自启、Windows/Linux 兼容、自动化单元测试。
+> 仅 macOS。
 
 ## 烧录
 
@@ -159,15 +159,6 @@ tail -f /tmp/clawd-mood-daemon.log
 ```
 
 每次事件应新增一行 `-> {"state":"...","event":"...","tool":"..."}`。
-
-### 5. 手动测试（不依赖 CLI）
-
-Daemon 跑着，往 FIFO 灌 JSON：
-
-```bash
-echo '{"state":"working"}' > /tmp/clawd-mood.fifo
-echo '{"state":"done"}'    > /tmp/clawd-mood.fifo
-```
 
 ---
 
