@@ -16,7 +16,7 @@
 **做什么**：
 - 新增 Codex 插件清单 `plugin/.codex-plugin/plugin.json`
 - 新增 Codex 专用 hooks 文件 `plugin/hooks/hooks-codex.json`（10 个事件）
-- 新增仓库根 `marketplace.json`，让 codex 能 `plugin marketplace add .`
+- 新增 `.agents/plugins/marketplace.json`（codex 官方期望路径，实测反推确认），让 codex 能 `plugin marketplace add .`
 - 修改 `plugin/scripts/hook.sh`，追加 3 行 case 处理 Codex 独有事件
 - 新增 `AGENTS.md`（一行指向 CLAUDE.md，让 codex 读到项目守则）
 - 更新 README、CLAUDE.md 增加 Codex 挂载段和事件映射表
@@ -52,7 +52,7 @@ Codex CLI event ───┘
 
 ```
 clawd-mood/
-├── marketplace.json                     ← 新增
+├── .agents/plugins/marketplace.json     ← 新增（codex 官方期望路径）
 ├── plugin/
 │   ├── .claude-plugin/plugin.json       (不变)
 │   ├── .codex-plugin/plugin.json        ← 新增
@@ -132,21 +132,24 @@ clawd-mood/
 
 **Claude Code 独有的 PostToolUseFailure / Notification**：保留在原 `hooks.json` 里，hook.sh 的 case 也保留，Codex 那边永远不会进这些分支。
 
-## 8. `marketplace.json`
+## 8. `.agents/plugins/marketplace.json`
 
-仓库根新增本地 marketplace 入口：
+实施 Task 1 反推确认 codex CLI 期望的 manifest 路径为 `.agents/plugins/marketplace.json`（**不是**仓库根 `marketplace.json`）。schema 抄自 codex 自带的 `~/.codex/.tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json`：
 
 ```json
 {
   "name": "clawd-mood",
-  "displayName": "clawd-mood",
+  "interface": { "displayName": "clawd-mood" },
   "plugins": [
-    { "name": "clawd-mood", "source": { "path": "./plugin" } }
+    { "name": "clawd-mood", "source": { "source": "local", "path": "./plugin" } }
   ]
 }
 ```
 
-**Schema 待验证**：上述字段按 codex 官方文档拼出，实施第一步用 `codex plugin marketplace add .` 跑通后反推确认。若字段名不一致，按 codex 报错调整。
+关键字段差异（vs 文档推测）：
+- `displayName` 在 `interface.displayName` 里，不是顶层
+- `source` 字段嵌套：外层 `source` 是字段名、内层 `source: "local"` 是值
+- `policy`、`category` 是 optional（bundled 都加了但 codex 不要求）
 
 ## 9. 安装流
 
@@ -224,11 +227,12 @@ python3 -m json.tool plugin/hooks/hooks-codex.json
 
 | # | 风险 | 应对 |
 |---|------|------|
-| R1 | `marketplace.json` 精确 schema 文档未给全 | 实施 Task 1 跑 `codex plugin marketplace add .`，按报错反推 |
+| R1 | ~~`marketplace.json` 精确 schema 文档未给全~~ | **已解决（实施 Task 1）**：manifest 路径是 `.agents/plugins/marketplace.json`，schema 见 § 8 |
 | R2 | `$CLAUDE_PLUGIN_ROOT` 是 Codex 标注的 "compatibility alias"，未来可能下线 | 当前 0.133.0 确认提供，记录但不预防性改造；真出问题改成 `${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}` |
 | R3 | Codex 对未声明事件可能 warn 或拒载 | hooks-codex.json 只声明 codex 真支持的事件；hook.sh 用 `*) exit 0` 兜底 |
-| R4 | `async: true` 字段名 codex 可能叫别的 | 实施时若 codex 报警，回退到不带 async（hook.sh 本来就是非阻塞实现） |
+| R4 | ~~`async: true` 字段名 codex 可能叫别的~~ | **已解决（实施 Task 3）**：`codex plugin add` 接受，无警告 |
 | R5 | 两端表情并发抢屏可能"鬼畜" | 接受现状；用户嫌乱可只挂一端，未来再考虑事件队列 |
+| R6 | **Codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink）**：改 `plugin/scripts/*` 后 codex 仍跑旧版本 | **开发流约束**：改完源仓库要 `codex plugin remove clawd-mood && codex plugin add clawd-mood@clawd-mood`。Claude Code 走 `--plugin-dir` 是 live path 无此问题。已写入 CLAUDE.md 挂载段和 README 故障排除 |
 
 ## 14. 关键约束沿用
 

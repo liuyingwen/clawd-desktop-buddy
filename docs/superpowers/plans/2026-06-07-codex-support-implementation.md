@@ -16,7 +16,7 @@
 
 | Path | Responsibility | 状态 |
 |---|---|---|
-| `marketplace.json` | Codex 本地 marketplace 入口（schema 实施 Task 1 反推） | 新增 |
+| `.agents/plugins/marketplace.json` | Codex 本地 marketplace 入口（路径与 schema 实施 Task 1 反推确认） | 新增 |
 | `plugin/.codex-plugin/plugin.json` | Codex 插件清单，指向 `hooks-codex.json` | 新增 |
 | `plugin/hooks/hooks-codex.json` | Codex 10 个事件注册（7 共有 + 3 独有） | 新增 |
 | `plugin/scripts/hook.sh` | 追加 3 个 case，其它不动 | 修改 |
@@ -30,12 +30,18 @@
 
 ---
 
-## Task 1: 创建 marketplace.json 并反推 schema
+## Task 1: 创建 marketplace 清单并反推 schema  ✅ 已完成（commit `5ae4b8f`）
 
 **Files:**
-- Create: `marketplace.json`
+- Create: `.agents/plugins/marketplace.json`（实施反推确认 codex 官方期望路径）
 
 Goal: 因为 Codex CLI 没有 `--plugin-dir` flag，本地开发必须先把仓库注册成 marketplace。Codex 官方文档未给完整 schema，本 task 用 `codex plugin marketplace add` 实测反推。
+
+**实施反推结论**：抄 codex 自带的 `~/.codex/.tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json` 一次成功，零迭代。关键差异 vs 文档推测：
+- manifest 路径在 `.agents/plugins/marketplace.json`（不是仓库根）
+- `displayName` 嵌套在 `interface.displayName`
+- `source` 字段嵌套：`{ "source": "local", "path": "./..." }`（外层 source 是字段名、内层 source 是值）
+- `policy` / `category` optional
 
 - [ ] **Step 1: 写初版 marketplace.json**
 
@@ -669,6 +675,17 @@ git commit -m "docs(codex): document codex CLI mount and dual-CLI usage"
 pgrep -fc scripts/daemon.py
 # 若 >1，pkill -f scripts/daemon.py 重置
 ```
+
+- [ ] **Step 1b: 重装 codex 插件让 hook.sh / hooks-codex.json 改动生效**
+
+⚠️ codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink），所以 Task 3/4 改完源仓库后，codex 端仍跑 cache 里的旧版本。验收前必须刷一次：
+
+```bash
+codex plugin remove clawd-mood
+codex plugin add clawd-mood@clawd-mood
+```
+
+Claude Code 走 `--plugin-dir` 是 live path，无需类似操作。
 
 - [ ] **Step 2: 启动 daemon + 接 ESP32**
 
