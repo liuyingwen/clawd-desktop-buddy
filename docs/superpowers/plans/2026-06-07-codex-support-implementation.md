@@ -509,7 +509,7 @@ codex plugin marketplace add .
 codex plugin add clawd-mood@clawd-mood
 ```
 
-任意目录 `codex` 就能用。在 codex 里 `/hooks` 确认 10 个事件都挂上（含 `PermissionRequest` / `PreCompact` / `PostCompact`）。卸载：`codex plugin remove clawd-mood`。
+任意目录 `codex` 就能用。在 codex 里 `/hooks` 确认 10 个事件都挂上（含 `PermissionRequest` / `PreCompact` / `PostCompact`）。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 ```
 
 - [ ] **Step 6: 新增"双 CLI 并发"节**
@@ -671,8 +671,8 @@ git commit -m "docs(codex): document codex CLI mount and dual-CLI usage"
 - [ ] **Step 1: 准备环境**
 
 ```bash
-# 确保只有 0 或 1 个 daemon
-pgrep -fc scripts/daemon.py
+# 确保只有 0 或 1 个 daemon（macOS pgrep 无 -c，用 wc -l 数）
+pgrep -f scripts/daemon.py | wc -l
 # 若 >1，pkill -f scripts/daemon.py 重置
 ```
 
@@ -681,7 +681,7 @@ pgrep -fc scripts/daemon.py
 ⚠️ codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink），所以 Task 3/4 改完源仓库后，codex 端仍跑 cache 里的旧版本。验收前必须刷一次：
 
 ```bash
-codex plugin remove clawd-mood
+codex plugin remove clawd-mood@clawd-mood
 codex plugin add clawd-mood@clawd-mood
 ```
 
@@ -745,7 +745,7 @@ codex
 同时开 Claude Code 和 Codex 各自跑一个长任务（例如读多个文件）。
 
 5 分钟内观察：
-- `pgrep -fc scripts/daemon.py` 始终 ≤ 1
+- `pgrep -f scripts/daemon.py | wc -l` 始终 ≤ 1（macOS pgrep 无 -c）
 - daemon log 不报错
 - 屏幕表情按事件交错切换（可能"鬼畜"——这是预期）
 

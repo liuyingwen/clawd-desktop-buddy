@@ -154,12 +154,12 @@ codex plugin marketplace add .          # 注册本地 marketplace（读 .agents
 codex plugin add clawd-mood@clawd-mood  # 装插件（拷贝到 ~/.codex/plugins/cache/）
 ```
 
-任意目录 `codex` 就能用。在 codex 里 `/hooks` 确认 10 个事件都挂上（含 `PermissionRequest` / `PreCompact` / `PostCompact`）。卸载：`codex plugin remove clawd-mood`。
+任意目录 `codex` 就能用。在 codex 里 `/hooks` 确认 10 个事件都挂上（含 `PermissionRequest` / `PreCompact` / `PostCompact`）。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 
 **Codex 改 plugin 后必须重装**：codex 是把 plugin 内容**拷贝**到 `~/.codex/plugins/cache/clawd-mood/clawd-mood/0.1.0/`，不是 symlink。修改了源仓库的 `plugin/scripts/hook.sh` / `hooks/hooks-codex.json` 后，codex 仍跑 cache 里的旧版本。开发时改完执行：
 
 ```bash
-codex plugin remove clawd-mood
+codex plugin remove clawd-mood@clawd-mood
 codex plugin add clawd-mood@clawd-mood
 ```
 

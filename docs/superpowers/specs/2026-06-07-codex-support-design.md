@@ -167,7 +167,7 @@ codex plugin marketplace add .
 codex plugin add clawd-mood@clawd-mood
 ```
 
-之后任意目录跑 `codex` 都会激活插件。`codex plugin list` 可确认。卸载：`codex plugin remove clawd-mood`。
+之后任意目录跑 `codex` 都会激活插件。`codex plugin list` 可确认。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 
 ## 10. `AGENTS.md`
 
@@ -212,7 +212,7 @@ done
 **集成 — 双 CLI 并发**：
 - 一终端开 Claude Code 长任务、另一终端开 Codex 长任务
 - 观察：daemon 不崩、串口 log 无错乱 JSON、表情按事件到达顺序切换
-- 确认 `pgrep -fc scripts/daemon.py` 始终 ≤ 1
+- 确认 `pgrep -f scripts/daemon.py | wc -l` 始终 ≤ 1（macOS pgrep 无 -c）
 
 **配置 lint**：
 ```bash
@@ -232,7 +232,7 @@ python3 -m json.tool plugin/hooks/hooks-codex.json
 | R3 | Codex 对未声明事件可能 warn 或拒载 | hooks-codex.json 只声明 codex 真支持的事件；hook.sh 用 `*) exit 0` 兜底 |
 | R4 | ~~`async: true` 字段名 codex 可能叫别的~~ | **已解决（实施 Task 3）**：`codex plugin add` 接受，无警告 |
 | R5 | 两端表情并发抢屏可能"鬼畜" | 接受现状；用户嫌乱可只挂一端，未来再考虑事件队列 |
-| R6 | **Codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink）**：改 `plugin/scripts/*` 后 codex 仍跑旧版本 | **开发流约束**：改完源仓库要 `codex plugin remove clawd-mood && codex plugin add clawd-mood@clawd-mood`。Claude Code 走 `--plugin-dir` 是 live path 无此问题。已写入 CLAUDE.md 挂载段和 README 故障排除 |
+| R6 | **Codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink）**：改 `plugin/scripts/*` 后 codex 仍跑旧版本 | **开发流约束**：改完源仓库要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood`。Claude Code 走 `--plugin-dir` 是 live path 无此问题。已写入 CLAUDE.md 挂载段和 README 故障排除 |
 
 ## 14. 关键约束沿用
 

@@ -107,7 +107,7 @@ codex plugin add clawd-mood@clawd-mood
 
 之后任意目录 `codex` 即可。在 codex 里 `/hooks` 确认 10 个事件全挂上。
 
-> Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/scripts/hook.sh` 等源文件后需要 `codex plugin remove clawd-mood && codex plugin add clawd-mood@clawd-mood` 才生效。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
+> Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/scripts/hook.sh` 等源文件后需要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 才生效。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
 
 #### 同时挂
 
