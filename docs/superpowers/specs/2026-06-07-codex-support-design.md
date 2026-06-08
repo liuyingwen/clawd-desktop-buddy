@@ -113,7 +113,7 @@ clawd-mood/
 
 ## 7. `hooks-codex.json` 事件映射
 
-10 个事件（7 共有 + 3 Codex 独有），每项 `matcher: ""`、`async: true`、command 仍指 `"$CLAUDE_PLUGIN_ROOT"/scripts/hook.sh`：
+10 个事件（7 共有 + 3 Codex 独有），每项 `matcher: ""`、command 仍指 `"$CLAUDE_PLUGIN_ROOT"/scripts/hook.sh`（**不带 `async: true`**——见 R4）：
 
 | 事件 | 类型 | → STATE | 说明 |
 |------|------|---------|------|
@@ -230,7 +230,7 @@ python3 -m json.tool plugin/hooks/hooks-codex.json
 | R1 | ~~`marketplace.json` 精确 schema 文档未给全~~ | **已解决（实施 Task 1）**：manifest 路径是 `.agents/plugins/marketplace.json`，schema 见 § 8 |
 | R2 | `$CLAUDE_PLUGIN_ROOT` 是 Codex 标注的 "compatibility alias"，未来可能下线 | 当前 0.133.0 确认提供，记录但不预防性改造；真出问题改成 `${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}` |
 | R3 | Codex 对未声明事件可能 warn 或拒载 | hooks-codex.json 只声明 codex 真支持的事件；hook.sh 用 `*) exit 0` 兜底 |
-| R4 | ~~`async: true` 字段名 codex 可能叫别的~~ | **已解决（实施 Task 3）**：`codex plugin add` 接受，无警告 |
+| R4 | codex 0.133.0 不支持 `async: true`（`plugin add` 接受但运行时 skip 并打 warning `async hooks are not supported yet`） | **已解决**：移除 hooks-codex.json 所有 `async: true`；hook.sh 本身是非阻塞实现（FIFO RW open），不需要 async 标记 |
 | R5 | 两端表情并发抢屏可能"鬼畜" | 接受现状；用户嫌乱可只挂一端，未来再考虑事件队列 |
 | R6 | **Codex 拷贝 plugin 到 `~/.codex/plugins/cache/`（不是 symlink）**：改 `plugin/scripts/*` 后 codex 仍跑旧版本 | **开发流约束**：改完源仓库要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood`。Claude Code 走 `--plugin-dir` 是 live path 无此问题。已写入 CLAUDE.md 挂载段和 README 故障排除 |
 
