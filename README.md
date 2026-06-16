@@ -1,10 +1,11 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
-> **0.2.0 BREAKING**：`/tmp/clawd-mood.fifo` 不再使用，改 TCP `127.0.0.1:<port>`（端口写在 `<tempdir>/clawd-mood.port`）。`plugin/scripts/hook.sh` 已删除，统一用 `plugin/scripts/hook.py`。升级方式：Claude Code 用户重新 `claude --plugin-dir`；Codex 用户 `codex plugin remove/add` 刷新缓存。
->
-> 跨平台支持：macOS / Linux / Windows。Windows 端代码完成但 **untested on real Windows hardware**，欢迎社区验证。
+<p align="center">
+  <img src="images/hero.png" width="48%" alt="clawd-mood on a coding desk, eyes showing the working face next to a MacBook" />
+  <img src="images/with-claude-pandas.jpg" width="48%" alt="clawd-mood in sleeping mode flanked by two Claude panda figurines" />
+</p>
 
 ## 准备
 
