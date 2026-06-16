@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+elf = "build/clawd_mood.ino.elf"
+firmware = "build/clawd_mood.ino.merged.bin"

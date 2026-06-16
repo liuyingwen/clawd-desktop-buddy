@@ -2,52 +2,52 @@
   "hooks": {
     "SessionStart": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "UserPromptSubmit": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "PreToolUse": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "PostToolUse": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "PermissionRequest": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "PreCompact": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "PostCompact": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "Stop": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "SubagentStart": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ],
     "SubagentStop": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh" }
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py" }
       ]}
     ]
   }

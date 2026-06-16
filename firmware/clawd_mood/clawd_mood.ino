@@ -58,16 +58,19 @@ inline int16_t eyeRX(int16_t ox) { return eyeLX(ox) + EYE_W + EYE_GAP; }
 inline int16_t eyeY()            { return (DISP_H - EYE_H) / 2 - EYE_OY; }
 inline int16_t eyeCY()           { return eyeY() + EYE_H / 2; }
 
-void drawNormalEyes(int16_t ox = 0, bool blink = false) {
+// blink: 0 = open, 1 = half-closed, 2 = closed
+void drawNormalEyes(int16_t ox = 0, uint8_t blink = 0) {
   tft.fillScreen(bgColor);
   const int16_t lx = eyeLX(ox), rx = eyeRX(ox), ey = eyeY();
-  if (!blink) {
-    tft.fillRect(lx, ey, EYE_W, EYE_H, C_BLACK);
-    tft.fillRect(rx, ey, EYE_W, EYE_H, C_BLACK);
-  } else {
-    tft.fillRect(lx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
-    tft.fillRect(rx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
+  int16_t h;
+  switch (blink) {
+    case 0:  h = EYE_H;     break;
+    case 1:  h = EYE_H / 2; break;
+    default: h = 6;         break;
   }
+  int16_t y = ey + (EYE_H - h) / 2;
+  tft.fillRect(lx, y, EYE_W, h, C_BLACK);
+  tft.fillRect(rx, y, EYE_W, h, C_BLACK);
 }
 
 void drawChevron(int16_t cx, int16_t cy, int16_t arm, int16_t reach,
@@ -178,16 +181,41 @@ void pollSerial() {
 
 void drawIdle() {
   static uint8_t step = 0;
-  static unsigned long lastStep = 0;
+  static unsigned long lastWiggle = 0;
+  static unsigned long blinkStart = 0;   // 0 = not blinking
+  static unsigned long nextBlinkAt = 0;
+  static uint8_t lastPhase = 0;
   unsigned long now = millis();
-  // Slow wiggle: every 800ms, cycle through 5 horizontal offsets
-  if (moodDirty || now - lastStep > 800) {
+
+  if (nextBlinkAt == 0) nextBlinkAt = now + 5000;
+
+  // Blink animation: half-closed → closed → half-closed → open, ~280ms total
+  uint8_t phase = 0;
+  if (blinkStart) {
+    unsigned long el = now - blinkStart;
+    if      (el < 80)  phase = 1;
+    else if (el < 200) phase = 2;
+    else if (el < 280) phase = 1;
+    else { blinkStart = 0; phase = 0; }
+  }
+
+  if (!blinkStart && now >= nextBlinkAt) {
+    blinkStart = now;
+    nextBlinkAt = now + 5000 + (now % 2500);  // 5–7.5s
+    phase = 1;
+  }
+
+  bool blinking = phase != 0;
+  bool wiggleDue = now - lastWiggle > 800;
+  bool phaseEdge = phase != lastPhase;
+  if (moodDirty || phaseEdge || (wiggleDue && !blinking)) {
     const int16_t offs[] = {0, -4, 0, 4, 0};
-    // Blink every ~3.2s (every 4th step)
-    bool blink = (step % 4 == 0) && (step != 0);
-    drawNormalEyes(offs[step % 5], blink);
-    step++;
-    lastStep = now;
+    drawNormalEyes(offs[step % 5], phase);
+    if (wiggleDue && !blinking) {
+      step++;
+      lastWiggle = now;
+    }
+    lastPhase = phase;
     moodDirty = false;
   }
 }
