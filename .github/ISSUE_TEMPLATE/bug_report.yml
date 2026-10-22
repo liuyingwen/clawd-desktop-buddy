@@ -1,0 +1,67 @@
+name: Bug 报告 / Bug report
+description: 固件、daemon、Claude Code 或 Codex 插件的行为和预期不一致。
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        描述你实际看到的表情或日志。仓库没有自动化测试，复现步骤越具体越容易查。
+        Describe the expression or log you actually saw. This repo has no automated tests, so exact steps help.
+  - type: dropdown
+    id: area
+    attributes:
+      label: 相关部分 / Area
+      options:
+        - 固件 / 屏幕 Firmware / display
+        - daemon（TCP 到串口）
+        - Claude Code 插件
+        - Codex CLI 插件
+        - Wokwi 仿真 sim/
+        - 文档 Docs
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 系统 / OS
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - 仅仿真 / Simulator only
+    validations:
+      required: true
+  - type: input
+    id: board
+    attributes:
+      label: 板子与屏幕 / Board and display
+      description: 例如 ESP32-C3 Super Mini + ST7789 1.54" 240x240。没有硬件就写「无」。
+      placeholder: ESP32-C3 Super Mini + ST7789 1.54"
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望 / Expected
+      description: 期望的状态或表情，例如 working 后 Stop 进入 done，约 3 秒回到 idle。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际 / Actual
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps
+      description: 包含 CLI（Claude Code 或 Codex）、事件，以及你是否手动往 TCP / 串口写了 JSON。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: |
+        daemon 日志：macOS / Linux 为 /tmp/clawd-mood-daemon.log，Windows 为 %TEMP%\clawd-mood-daemon.log。
+        串口监视器里的 [warn] 行也请贴上。
+      render: text

@@ -89,7 +89,7 @@ PIDS+=($!)
 
 green "==> 就绪"
 echo "  推状态：  echo '{\"state\":\"working\"}' > /tmp/clawd-mood.fifo"
-echo "  喂事件：  echo '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\"}' | $PROJECT_ROOT/plugin/scripts/hook.sh"
+echo "  hook.py 写的是 TCP daemon，不会进入这条 FIFO"
 echo "  画面验证：CLI 是 headless 的，要看眼睛动画请用 https://wokwi.com 网页 IDE"
 echo "  Ctrl+C 全停"
 wait
