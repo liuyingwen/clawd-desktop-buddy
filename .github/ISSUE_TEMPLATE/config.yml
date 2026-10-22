@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用说明 / README
+    url: https://github.com/liuyingwen/clawd-desktop-buddy/blob/main/README.md
+    about: 接线、烧录、挂载 Claude Code / Codex，以及手动灌状态的步骤。

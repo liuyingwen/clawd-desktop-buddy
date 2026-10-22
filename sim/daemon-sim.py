@@ -3,9 +3,11 @@
 # requires-python = ">=3.12"
 # dependencies = ["pyserial>=3.5"]
 # ///
-"""sim-only daemon: 跟 plugin/scripts/daemon.py 同款 FIFO→serial 桥，
-但跳过 DTR/RTS 设置（pty 不支持，真 USB CDC 才支持）。
-只在 sim/sim.sh 里被调用，不参与真硬件路径。"""
+"""仿真专用：FIFO → 虚拟串口。
+
+真 daemon（plugin/scripts/daemon.py）是 TCP → USB CDC，并设置 DTR/RTS。
+socat 的 pty 不支持这两根信号，所以这里跳过。只由 sim/sim.sh 调用。
+"""
 
 import json
 import os

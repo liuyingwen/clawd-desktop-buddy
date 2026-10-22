@@ -1,0 +1,36 @@
+name: 功能建议 / Feature request
+description: 建议一个新表情、新事件映射，或其他还没有的行为。
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先看 README 的「当前范围」。WiFi、OTA、蜂鸣器、开机系统服务、多设备同时驱动目前不在计划内。
+        Check the README scope first. Wi-Fi, OTA, a buzzer, boot-time system services, and driving several displays at once are out of scope today.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的情况 / Problem
+      description: 你在用 Claude Code 或 Codex 时，哪一步屏幕没有表达出状态？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议 / Proposal
+      description: 希望增加的状态名、CLI 事件，或屏幕表现。状态名需要小写，并和现有 7 个状态的映射说清楚。
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 会改到哪里 / Surface
+      multiple: true
+      options:
+        - 固件表情 Firmware expression
+        - hook.py 事件映射
+        - daemon 串口桥
+        - 文档 Docs
+        - 还不确定 Not sure
+    validations:
+      required: true

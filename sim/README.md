@@ -1,22 +1,24 @@
 # clawd-mood Wokwi 仿真
 
-不接 ESP32 硬件、不焊屏幕，纯软件跑端到端：
+不接 ESP32 硬件、不焊屏幕，用 Wokwi 看固件表情：
 
 ```
-Claude Code / Codex → hook.sh → /tmp/clawd-mood.fifo → daemon.py
-                                                          ↓
-                                                  /tmp/wokwi-tty (socat 虚拟串口)
-                                                          ↓
-                                                  wokwi-cli --interactive
-                                                          ↓
-                                                  Wokwi 模拟 ESP32-C3 + LCD
+echo '{"state":"..."}' > /tmp/clawd-mood.fifo → daemon-sim.py
+                                                      ↓
+                                              /tmp/wokwi-tty (socat 虚拟串口)
+                                                      ↓
+                                              wokwi-cli --interactive
+                                                      ↓
+                                              Wokwi 模拟 ESP32-C3 + LCD
 ```
+
+真机路径是另一条：`hook.py` → TCP `127.0.0.1` → `plugin/scripts/daemon.py` → USB CDC。仿真 FIFO **不会**收到 hook 的输出。要在模拟器里看某一种表情，把对应的 `{"state":"..."}` 写进 FIFO。
 
 **这个目录跟主项目完全隔离**——不动 `firmware/`、`plugin/`、`docs/`、`CLAUDE.md`、`AGENTS.md`。`rm -rf sim/` 就能撤回。
 
 > **为啥另有一个 `daemon-sim.py`？**
-> 真 `plugin/scripts/daemon.py` 开串口后会设 `ser.dtr=False / ser.rts=False` 抑制 ESP32 的 RTS 复位脉冲。这俩 modem control 信号只有真 USB CDC 支持，socat 造的 pty 一设就 `OSError: Inappropriate ioctl for device`。
-> 为了不碰真 daemon，`sim/daemon-sim.py` 是同款 FIFO→serial 桥的精简版，跳过 DTR/RTS 那两行。功能上 1:1，只在 sim 模式被调用。
+> 真 `plugin/scripts/daemon.py` 是 TCP → USB CDC。它打开串口后会设 `ser.dtr=False / ser.rts=False`，避免 ESP32 被复位脉冲重启。这两根信号只有真 USB CDC 支持，socat 造的 pty 一设就 `OSError: Inappropriate ioctl for device`。
+> `sim/daemon-sim.py` 因此做成 FIFO → 虚拟串口，跳过 DTR/RTS，只由 `sim.sh` 调用。
 
 ## 一次性准备
 
@@ -65,12 +67,7 @@ Claude Code / Codex → hook.sh → /tmp/clawd-mood.fifo → daemon.py
 ## 测什么
 
 ```bash
-# 端到端：hook 全链路（推荐）
-echo '{"hook_event_name":"PreToolUse","tool_name":"Bash"}' \
-  | ./plugin/scripts/hook.sh
-# 屏幕应该切到 working
-
-# 跳过 hook，直接灌 FIFO（测 daemon → 固件）
+# daemon-sim → 固件。hook.py 走 TCP，不会写这条 FIFO
 echo '{"state":"working"}' > /tmp/clawd-mood.fifo
 echo '{"state":"done"}'    > /tmp/clawd-mood.fifo  # 3 秒后自动回 idle
 
@@ -81,15 +78,7 @@ for s in idle thinking working waiting done error sleeping; do
 done
 ```
 
-挂着真 Claude Code 跑也行：
-
-```bash
-# 终端 A：sim 一直开
-./sim/sim.sh
-
-# 终端 B：用挂了插件的 Claude Code 干活
-claude --plugin-dir $(pwd)/plugin
-```
+插件和仿真不要叠在一起跑。`claude --plugin-dir` 会让 `hook.py` 去连 TCP daemon，并在没有 daemon 时启动 `plugin/scripts/daemon.py`；`sim.sh` 启动前如果发现这个进程会直接退出。看 CLI 事件对应的脸时，按 README 的事件表把 `state` 写进 FIFO。
 
 ## 已知 gap（仿真器 vs 真硬件）
 
