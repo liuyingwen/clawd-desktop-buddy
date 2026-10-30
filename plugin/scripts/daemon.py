@@ -111,6 +111,7 @@ def check_singleton() -> None:
 
 
 def main() -> None:
+    sys.stdout.reconfigure(line_buffering=True)  # log is a file when auto-started
     install_signal_handlers()
     check_singleton()
 

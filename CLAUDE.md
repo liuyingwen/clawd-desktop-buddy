@@ -28,7 +28,7 @@ firmware/clawd_mood/*.ino     (Arduino 状态机 + 像素眼渲染)
 
 三个组件**互相独立**，可单独测试：
 - 不启动 daemon 时，hook.py 读 portfile 拿不到端口（或连不上）直接静默退出（不阻塞 Claude Code / Codex）
-- 不启动 CLI 时，可直接 `printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat /tmp/clawd-mood.port)` 测 daemon + 固件（Windows 见下文"手动测试"）
+- 不启动 CLI 时，可直接 `printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)` 测 daemon + 固件（Windows 见下文"手动测试"）
 - 不接 ESP32 时，daemon 找不到 USB CDC 设备直接退出
 - 不挂 Claude Code 时，可只挂 Codex（`codex plugin add clawd-mood@clawd-mood`），或反之；两端可独立、可同装
 
@@ -66,11 +66,11 @@ ESP32-C3 用 `SPI.begin(8, -1, 10, TFT_CS)` 显式指定 SCK=8 / MOSI=10，不�
 - **Singleton 用 portfile + connect() 探活而非 PID 文件**：避免脏 PID、避免 `pgrep -f` 在 Windows 上不存在的问题。代价是 daemon 异常崩了 portfile 可能残留，但下次启动会自动覆盖（`check_singleton()` 探不到活就 take over）。
 - **首条 SessionStart 状态消息会丢**：daemon 冷启动约 2–3 秒（uv 首次装 pyserial），此时 portfile 还没出现，`hook.py` 走 `port is None` 路径静默退出。下一条 `UserPromptSubmit` 会把状态补推上去，所以表情滞后但不会卡。
 - **daemon 永驻**：不在 `Stop` 事件里关 daemon，避免多个 CLI 会话相互踩踏。需要重启 daemon 就 `pkill -f scripts/daemon.py`（mac/linux）；Windows 上更稳的做法是按 PID 杀（避免 `taskkill /F /IM python.exe` 误杀其他 python 进程）。
-- **日志位置**：`<tempfile.gettempdir()>/clawd-mood-daemon.log` —— mac/linux 上 `/tmp/clawd-mood-daemon.log`，Windows 上 `%TEMP%\clawd-mood-daemon.log`。
+- **日志位置**：`<tempfile.gettempdir()>/clawd-mood-daemon.log` —— mac/linux 上 `${TMPDIR:-/tmp}/clawd-mood-daemon.log`（macOS 的 `$TMPDIR` 是 `/var/folders/...`，不是 `/tmp`），Windows 上 `%TEMP%\clawd-mood-daemon.log`。
 
 ### 7. portfile 服务发现 + 端口自适应
 
-daemon 启动时尝试 bind 默认端口 `48756`，被占则回退到 `bind(0)` 让 OS 分配空闲端口。实际监听端口写入 portfile：`<tempfile.gettempdir()>/clawd-mood.port`（mac/linux: `/tmp/clawd-mood.port`，Windows: `%TEMP%\clawd-mood.port`）。
+daemon 启动时尝试 bind 默认端口 `48756`，被占则回退到 `bind(0)` 让 OS 分配空闲端口。实际监听端口写入 portfile：`<tempfile.gettempdir()>/clawd-mood.port`（mac/linux: `${TMPDIR:-/tmp}/clawd-mood.port`，Windows: `%TEMP%\clawd-mood.port`）。
 
 hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 - 默认端口冲突时自动避让，零配置
@@ -89,13 +89,19 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 
 hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` / `SubagentStart` / `SubagentStop` 都映射到 `working`，避免表情在工具调用过程中乱跳。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
 
-**Codex CLI 独有事件映射**（codex 0.133.0 起）：
+**两端共有的事件映射**：
 
-- `PermissionRequest` → `waiting`（codex 等用户批准命令，对标 Claude Code 的 `Notification`）
-- `PreCompact` → `thinking`（codex 正在压缩上下文）
-- `PostCompact` → `working`（codex 压缩完成回到工作流）
+- `PermissionRequest` → `waiting`（等用户批准）
+- `PreCompact` → `thinking`（正在压缩上下文）
+- `PostCompact` → `working`（压缩完成回到工作流）
+- `SessionEnd` → `idle`（会话退出，避免停在 `working`）
 
-Claude Code 独有事件 `PostToolUseFailure` / `Notification` 仍保留映射，Codex 不会触发，互不干扰。
+`SessionStart` 的 `source` 为 `compact` 时只探活、不推状态：它在回合中途触发，推 `idle` 会打断工作表情。
+
+**单端独有的事件映射**，另一端不会触发，互不干扰：
+
+- Claude Code：`PostToolUseFailure` → `error`、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`
+- Codex：`Interrupt` → `idle`（用户中断回合）
 
 state 枚举（小写、严格匹配）：`idle | thinking | working | waiting | done | error | sleeping`。固件里 `parseMood` 用 `strcmp`，**大小写敏感**。
 
@@ -176,7 +182,7 @@ PYTHONUNBUFFERED=1 ./plugin/scripts/daemon.py
 claude --plugin-dir /absolute/path/to/clawd-mood/plugin
 ```
 
-在 Claude Code 里 `/hooks` 确认 9 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / Notification / Stop / SubagentStart / SubagentStop）。
+在 Claude Code 里 `/hooks` 确认 14 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / Notification / PreCompact / PostCompact / Stop / StopFailure / SubagentStart / SubagentStop / SessionEnd）。
 
 **Codex CLI**（≥ 0.133.0）：
 
@@ -186,7 +192,7 @@ codex plugin marketplace add .          # 注册本地 marketplace（读 .agents
 codex plugin add clawd-mood@clawd-mood  # 装插件（拷贝到 ~/.codex/plugins/cache/）
 ```
 
-任意目录 `codex` 就能用。在 codex 里 `/hooks` 确认 10 个事件都挂上（含 `PermissionRequest` / `PreCompact` / `PostCompact`）。卸载：`codex plugin remove clawd-mood@clawd-mood`。
+在 codex 里运行 `/hooks` 审阅并**信任** 12 个事件（比 Claude Code 少 `PostToolUseFailure` / `Notification` / `StopFailure`，多 `Interrupt`）：未信任的 hook 不会执行，hook 内容变更后要重新信任。之后任意目录 `codex` 就能用。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 
 **Codex 改 plugin 后必须重装**：codex 是把 plugin 内容**拷贝**到 `~/.codex/plugins/cache/clawd-mood/clawd-mood/<version>/`，不是 symlink。修改了源仓库的 `plugin/scripts/hook.py` / `hooks/hooks-codex.json` 后，codex 仍跑 cache 里的旧版本。开发时改完执行：
 
@@ -202,7 +208,7 @@ Claude Code 走 `--plugin-dir` 是 live path，无此问题。
 ```bash
 # 灌 TCP 走完整管道（daemon → 串口 → 屏幕）
 # mac/linux:
-printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat /tmp/clawd-mood.port)
+printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)
 # Windows PowerShell:
 #   $p = Get-Content $env:TEMP\clawd-mood.port
 #   $c = New-Object Net.Sockets.TcpClient('127.0.0.1', $p)
@@ -223,7 +229,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 **没有自动化测试**——硬件依赖重、IO 逻辑短，靠手测 + 集成测覆盖：
 
 - **固件单独**：Arduino 串口监视器手输 7 种 JSON，肉眼确认 7 表情
-- **daemon + 固件**：`printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat /tmp/clawd-mood.port)`（mac/linux），Windows PowerShell 见上"手动测试"段
+- **daemon + 固件**：`printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)`（mac/linux），Windows PowerShell 见上"手动测试"段
 - **端到端**：跑真实任务（"列出当前目录"），观察 Idle → Thinking → Working → Done → Idle 序列
 - **Done 3 秒回 Idle、Sleeping 5 分钟进入**：临时把 `SLEEP_IDLE_MS` 改成 `15000UL` 缩短验证
 - **Linux / Windows**：未在本地端到端验证；代码层 review 确认无 macOS-isms。社区验证 welcome
@@ -235,8 +241,8 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `firmware/clawd_mood/clawd_mood.ino` —— 单文件 Arduino sketch；7 个 `drawXxx()` 函数 + `tickMoodMachine()` 计时器 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
 - `plugin/.claude-plugin/plugin.json` —— Claude Code 插件清单
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
-- `plugin/hooks/hooks.json` —— Claude Code 9 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
-- `plugin/hooks/hooks-codex.json` —— Codex 10 个事件（含 PermissionRequest / PreCompact / PostCompact），同一个 hook.py
+- `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
+- `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现
 - `.agents/plugins/marketplace.json` —— Codex 本地 marketplace 入口

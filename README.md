@@ -112,7 +112,7 @@ uv run plugin\scripts\daemon.py
 ```
 clawd-mood daemon started
   TCP:    127.0.0.1:48756
-  Portfile: /tmp/clawd-mood.port
+  Portfile: /var/folders/.../T/clawd-mood.port
   Serial: /dev/cu.usbmodem101
   Ready!
 ```
@@ -129,11 +129,11 @@ clawd-mood daemon started
 
 ```bash
 cd /path/to/clawd-mood
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install clawd-mood@clawd-mood
 ```
 
-之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 9 个事件全挂上。卸载：
+之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 14 个事件全挂上。卸载：
 
 ```bash
 claude plugin uninstall clawd-mood@clawd-mood
@@ -156,7 +156,9 @@ codex plugin marketplace add .
 codex plugin add clawd-mood@clawd-mood
 ```
 
-之后任意目录 `codex` 即可。在 codex 里 `/hooks` 确认 10 个事件全挂上。
+**Codex 默认不执行未信任的 hook**：装完后在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 12 个事件，否则屏幕不会有反应。信任绑定 hook 内容的哈希，hook 变更后需要重新信任。
+
+之后任意目录 `codex` 即可。
 
 卸载：
 
@@ -175,12 +177,12 @@ codex plugin marketplace remove clawd-mood
 
 | 状态     | 触发                                                                  |
 | -------- | --------------------------------------------------------------------- |
-| Idle     | 会话开始 / Stop 后 3 秒回归                                           |
-| Thinking | 提交 prompt / Codex 压缩上下文中（PreCompact）                        |
-| Working  | 调用工具 / Codex 压缩完恢复（PostCompact）                            |
-| Waiting  | Claude 等你输入（Notification）/ Codex 等你批准（PermissionRequest）  |
+| Idle     | 会话开始或结束 / Stop 后 3 秒回归 / Codex 中断回合（Interrupt）       |
+| Thinking | 提交 prompt / 压缩上下文中（PreCompact）                              |
+| Working  | 调用工具 / 压缩完恢复（PostCompact）                                  |
+| Waiting  | 等你输入（Notification，Claude 独有）/ 等你批准（PermissionRequest）  |
 | Done     | 回答完成（3 秒瞬态）                                                  |
-| Error    | 工具失败（Claude Code 独有 PostToolUseFailure）                       |
+| Error    | 工具失败（PostToolUseFailure）/ API 报错（StopFailure），均为 Claude 独有 |
 | Sleeping | 5 分钟无事件                                                          |
 
 ### 4. 快速验证
@@ -203,7 +205,7 @@ Codex 特有事件验证：
 
 ```bash
 # mac/linux
-printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat /tmp/clawd-mood.port)
+printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)
 ```
 
 ```powershell
@@ -219,7 +221,7 @@ $s.Write($b, 0, $b.Length); $c.Close()
 
 ```bash
 # mac/linux
-tail -f /tmp/clawd-mood-daemon.log
+tail -f ${TMPDIR:-/tmp}/clawd-mood-daemon.log
 
 # Windows PowerShell
 Get-Content $env:TEMP\clawd-mood-daemon.log -Wait
@@ -245,7 +247,7 @@ codex plugin marketplace remove clawd-mood
 
 ```bash
 # mac/linux
-pkill -f scripts/daemon.py; rm -f /tmp/clawd-mood.port
+pkill -f scripts/daemon.py; rm -f ${TMPDIR:-/tmp}/clawd-mood.port
 ```
 
 ```powershell
@@ -261,10 +263,10 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 - **屏幕不亮**：检查接线，特别是 VCC 是不是接到 3V3 而不是 5V
 - **屏幕方向不对**：改 `firmware/clawd_mood/clawd_mood.ino` 里 `tft.setRotation(1)` 换成 0/2/3 重烧
 - **`No ESP32-like USB CDC device found`**：板子没插好，或者 USB 数据线只能充电不能传输；Linux 检查是否加入 `dialout` 组；Windows 检查设备管理器有无未识别设备
-- **Daemon 日志不刷新**：用 `PYTHONUNBUFFERED=1 ./plugin/scripts/daemon.py` 启动
 - **多个 ESP32 同时插**：用环境变量指定端口
   - mac/linux: `CLAWD_MOOD_PORT=/dev/cu.usbmodemXXX ./plugin/scripts/daemon.py`
   - Windows PowerShell: `$env:CLAWD_MOOD_PORT='COM7'; uv run plugin\scripts\daemon.py`
 - **默认 TCP 端口 48756 被占**：daemon 会自动回退到 OS 分配的空闲端口（写进 portfile），hook 读 portfile 自动跟随。要强制指定：`CLAWD_MOOD_PORT_TCP=49000 ./plugin/scripts/daemon.py`（显式指定时冲突会直接报错退出）
 - **Codex 不识别插件**：检查 `codex plugin marketplace list` 看本地 marketplace 是否注册；若 marketplace 路径变了，先 `codex plugin marketplace remove clawd-mood` 再 `add` 一次
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
+- **Codex 里屏幕完全没反应**：hook 还没被信任，在 codex 里运行 `/hooks` 审阅并信任

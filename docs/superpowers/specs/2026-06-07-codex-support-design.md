@@ -254,3 +254,10 @@ python3 -m json.tool plugin/hooks/hooks-codex.json
 - [ ] 双 CLI 并发 5 分钟 → daemon 不崩、表情切换合理
 - [ ] README 和 CLAUDE.md 更新合并
 - [ ] 全部改动一次 commit，包含 spec 文档
+
+## 2026-10-30 更新：对齐 Claude Code 2.1.314 / Codex 0.165
+
+- 两端 hook 全部 `async: true`：Codex 已支持后台 hook，不再阻塞工具调用。
+- Claude Code 增加 `PermissionRequest` / `PreCompact` / `PostCompact` / `StopFailure` / `SessionEnd`，Codex 增加 `Interrupt` / `SessionEnd`。此前的"Codex 独有"映射已变为两端共有。
+- `SessionStart` 的 `source=compact` 不推状态，避免回合中途跳回 `idle`。
+- Codex 的插件 hook 需在 `/hooks` 里信任后才执行，信任绑定内容哈希。
