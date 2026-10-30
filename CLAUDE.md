@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概要
 
-`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示项目名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。
+`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI / OpenCode / pi / WorkBuddy / DeepSeek Harness** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示会话标题或目录名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。
 
 **跨平台桌面摆件（macOS / Linux / Windows）**。明确不做：WiFi 控制、OTA、launchd/systemd 系统级自启、自动化单元测试、蜂鸣器、多设备。Windows 端代码完成但 **untested on Windows** —— 欢迎社区验证（见 README）。Linux 同样未在 CI 验证，但 POSIX 路径与 macOS 共用，回归风险低。
 
@@ -129,12 +129,26 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 
 如果觉得"鬼畜"，停掉其中一端的会话即可（不需要卸载插件）。
 
+## 其他 agent 的接入方式
+
+新 agent 优先复用 `hook.py`；只有进程内扩展才自己映射状态。设计见 `docs/superpowers/specs/2026-10-30-multi-agent-support-design.md`。
+
+- **WorkBuddy / CodeBuddy Code**：复用 `hooks/hooks.json`（引擎同时注入 `CLAUDE_PLUGIN_ROOT` 和 `CODEBUDDY_PLUGIN_ROOT`），只多一份 `plugin/.codebuddy-plugin/plugin.json` 和根目录 `.codebuddy-plugin/marketplace.json`
+- **DeepSeek Harness**：官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 7 个事件。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
+- **OpenCode ≥ 2.0 / pi**：`plugin/adapters/` 下的进程内适配器，事件直接映射成 state 走 TCP，`hook.py` 只用来拉起 daemon（`source: compact`，不推状态）。**不要改成每个事件起一个 uv**：`opencode run` 在回合结束约 8ms 后就退出，最后的 done 会丢
+
+**容易踩坑**：
+- `hooks.json` / `hooks-dsh.json` 的命令结尾必须带 `|| true`。`uv` 自身出错退出码是 2，而同步 hook 的 2 表示拦截，会把用户的 prompt 全部挡掉
+- OpenCode 1.x 的 `event` / `tool.execute.*` 接口在 2.0 不运行；2.0 的事件名是 `session.execution.*`、`session.tool.*`，且 payload 在 `data` 上
+- pi 的 `agent_end` 不代表结束（可能重试、压缩），完成信号是 `agent_settled`；pi 的 subagent 是子进程，靠 `CLAWD_MOOD_PI_OWNER` 环境变量只让顶层进程驱动屏幕
+- CodeBuddy 的 `--plugin-dir` 下事件会触发两次（marketplace 安装不会），状态相同，无害
+
 ## 串口协议
 
 - 方向：**单向** Mac → ESP32，ESP32 不回包
 - 格式：NDJSON（换行分隔），UTF-8，115200 baud
 - 必需字段：`state`
-- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX`）、`end`（`SessionEnd` 时为 `true`，移除该会话）
+- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS`，WorkBuddy 共用 hooks.json 所以是 `CC`）、`end`（`SessionEnd` 时为 `true`，移除该会话）
 - 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
 - 可选调试字段：`event`、`tool`（截断到 32 字符）
 - 单行上限 320 字节（`LINE_MAX`）；daemon 只转发，不解析会话
@@ -259,6 +273,9 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
 - `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
 - `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
+- `plugin/adapters/opencode/clawd-mood.js`、`plugin/adapters/pi/clawd-mood.ts` —— 进程内适配器，直接走 TCP，自带 `session`（按进程）/ `name` / `src`
+- `plugin/hooks/hooks-dsh.json` —— DeepSeek Harness 桥接用，7 个事件，`python3` 启动，传 `dsh` 参数标记来源
+- `plugin/.codebuddy-plugin/plugin.json`、`.codebuddy-plugin/marketplace.json` —— WorkBuddy / CodeBuddy Code 清单
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现
 - `.agents/plugins/marketplace.json` —— Codex 本地 marketplace 入口

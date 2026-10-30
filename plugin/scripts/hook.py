@@ -5,14 +5,19 @@
 # ///
 """clawd-mood hook — maps CLI hook events to ESP32 states via TCP.
 
-Receives hook JSON on stdin (from Claude Code / Codex CLI), looks up the
-event in EVENT_TO_STATE, then opens a short TCP connection to the daemon
-and sends a single NDJSON line tagged with the session it came from. On
-SessionStart, spawns the daemon detached if it is not already running. Pure
-stdlib (no third-party deps) so uv run is fast (~80-200ms cached).
+Receives hook JSON on stdin (from Claude Code / Codex CLI / WorkBuddy /
+DeepSeek Harness), looks up the event in EVENT_TO_STATE, then opens a short
+TCP connection to the daemon and sends a single NDJSON line tagged with the
+session it came from. On SessionStart, spawns the daemon detached if it is not
+already running. Pure stdlib (no third-party deps) so uv run is fast
+(~80-200ms cached), and DeepSeek Harness can run it with plain python3 (uv
+cannot init its cache in that sandbox).
 
-Pass "codex" as argv[1] from the Codex hook config; default source is Claude Code.
+Pass "codex" or "dsh" as argv[1] from those hook configs; default source is
+Claude Code.
 """
+
+from __future__ import annotations  # `int | None` on the python3 macOS ships
 
 import hashlib
 import json
@@ -84,11 +89,12 @@ def session_fields(payload: dict) -> dict:
     cwd = payload.get("cwd") or os.getcwd()
     raw_id = payload.get("session_id") or cwd
     short_id = hashlib.sha1(raw_id.encode()).hexdigest()[:8]
-    codex = sys.argv[1:] == ["codex"]
+    source = sys.argv[1] if len(sys.argv) > 1 else ""
+    codex = source == "codex"
     fields = {
         "session": short_id,
         "name": clean_label(os.path.basename(cwd.rstrip("/\\\\"))) or short_id,
-        "src": "CX" if codex else "CC",
+        "src": {"codex": "CX", "dsh": "DS"}.get(source, "CC"),
     }
     title = clean_label(read_title(payload, codex) or "")
     if title:
