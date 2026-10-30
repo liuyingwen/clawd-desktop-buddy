@@ -13,8 +13,8 @@ already running. Pure stdlib (no third-party deps) so uv run is fast
 (~80-200ms cached), and DeepSeek Harness can run it with plain python3 (uv
 cannot init its cache in that sandbox).
 
-Pass "codex" or "dsh" as argv[1] from those hook configs; default source is
-Claude Code.
+Pass "codex" or "dsh" as argv[1] from those hook configs; otherwise the source
+is WorkBuddy or Claude Code, told apart by environment.
 """
 
 from __future__ import annotations  # `int | None` on the python3 macOS ships
@@ -84,6 +84,11 @@ def clean_label(text: str) -> str:
     return "".join(c for c in text if c.isprintable())[:16]
 
 
+def detect_shared_source() -> str:
+    """Claude Code and WorkBuddy share hooks.json; only WorkBuddy's engine sets this."""
+    return "WB" if os.environ.get("CODEBUDDY_PLUGIN_ROOT") else "CC"
+
+
 def session_fields(payload: dict) -> dict:
     """Short identity for the device (labels are cut to fit its 320-byte lines)."""
     cwd = payload.get("cwd") or os.getcwd()
@@ -94,7 +99,7 @@ def session_fields(payload: dict) -> dict:
     fields = {
         "session": short_id,
         "name": clean_label(os.path.basename(cwd.rstrip("/\\\\"))) or short_id,
-        "src": {"codex": "CX", "dsh": "DS"}.get(source, "CC"),
+        "src": {"codex": "CX", "dsh": "DS"}.get(source) or detect_shared_source(),
     }
     title = clean_label(read_title(payload, codex) or "")
     if title:

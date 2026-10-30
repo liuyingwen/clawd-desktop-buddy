@@ -224,7 +224,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 #### 同时挂
 
-多端可同时跑，每个会话各占一格，左上角标来源：`CC`（Claude Code，WorkBuddy 也显示为 `CC`）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`DS`（DeepSeek Harness）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
+多端可同时跑，每个会话各占一格，左上角标来源：`CC`（Claude Code）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`WB`（WorkBuddy / CodeBuddy Code）、`DS`（DeepSeek Harness）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
 
 ### 3. 屏幕说明
 

@@ -148,7 +148,7 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - 方向：**单向** Mac → ESP32，ESP32 不回包
 - 格式：NDJSON（换行分隔），UTF-8，115200 baud
 - 必需字段：`state`
-- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS`，WorkBuddy 共用 hooks.json 所以是 `CC`）、`end`（`SessionEnd` 时为 `true`，移除该会话）
+- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS` / `WB`，WorkBuddy 与 Claude Code 共用 hooks.json，靠 `CODEBUDDY_PLUGIN_ROOT` 环境变量区分）、`end`（`SessionEnd` 时为 `true`，移除该会话）
 - 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
 - 可选调试字段：`event`、`tool`（截断到 32 字符）
 - 单行上限 320 字节（`LINE_MAX`）；daemon 只转发，不解析会话
@@ -232,6 +232,8 @@ codex plugin add clawd-mood@clawd-mood
 ```
 
 Claude Code 走 `--plugin-dir` 是 live path，无此问题。
+
+**WorkBuddy 改 plugin 后要清缓存再重装**：它同样拷贝到 `~/.workbuddy/plugins/cache/clawd-mood/clawd-mood/<version>/`，而且 `plugin uninstall` 不删这个目录，版本号没变时重装会继续用旧文件。改完先 uninstall，删掉该目录（或升版本号），再 install。
 
 ### 手动测试（不依赖 Claude Code）
 

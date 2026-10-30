@@ -4,7 +4,7 @@
 
 在 Claude Code、Codex CLI 之外，让摆件也能显示 OpenCode、pi、WorkBuddy、DeepSeek Harness 的状态。daemon、串口协议和固件都不改。
 
-> 后续：多会话桌面小队（`2026-10-30-multi-session-squad-design.md`）给串口协议加了会话字段。适配器按进程发 `session`，`src` 分别为 `OC`、`PI`；DeepSeek Harness 的 hook 传 `dsh`，显示 `DS`；WorkBuddy 共用 hooks.json，显示 `CC`。
+> 后续：多会话桌面小队（`2026-10-30-multi-session-squad-design.md`）给串口协议加了会话字段。适配器按进程发 `session`，`src` 分别为 `OC`、`PI`；DeepSeek Harness 的 hook 传 `dsh`，显示 `DS`；WorkBuddy 共用 hooks.json，靠引擎注入的 `CODEBUDDY_PLUGIN_ROOT` 环境变量识别，显示 `WB`。
 
 ## 接入方式
 
