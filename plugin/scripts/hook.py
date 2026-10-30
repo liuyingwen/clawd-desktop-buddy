@@ -30,11 +30,14 @@ EVENT_TO_STATE = {
     "PostToolUseFailure": "error",       # Claude Code only
     "Notification":       "waiting",     # Claude Code only
     "Stop":               "done",
+    "StopFailure":        "error",       # Claude Code only
     "SubagentStart":      "working",
     "SubagentStop":       "working",
-    "PermissionRequest":  "waiting",     # Codex only
-    "PreCompact":         "thinking",    # Codex only
-    "PostCompact":        "working",     # Codex only
+    "PermissionRequest":  "waiting",
+    "PreCompact":         "thinking",
+    "PostCompact":        "working",
+    "Interrupt":          "idle",        # Codex only
+    "SessionEnd":         "idle",
 }
 
 
@@ -96,6 +99,8 @@ def main() -> None:
 
     if event == "SessionStart":
         ensure_daemon_running()
+        if payload.get("source") == "compact":
+            return  # fires mid-turn after compaction; don't drop back to idle
 
     port = read_portfile()
     if port is None:

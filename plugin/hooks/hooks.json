@@ -25,12 +25,32 @@
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
       ]}
     ],
+    "PermissionRequest": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
+      ]}
+    ],
     "Notification": [
       { "matcher": "", "hooks": [
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
       ]}
     ],
+    "PreCompact": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
+      ]}
+    ],
+    "PostCompact": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
+      ]}
+    ],
     "Stop": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
+      ]}
+    ],
+    "StopFailure": [
       { "matcher": "", "hooks": [
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
       ]}
@@ -41,6 +61,11 @@
       ]}
     ],
     "SubagentStop": [
+      { "matcher": "", "hooks": [
+        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
+      ]}
+    ],
+    "SessionEnd": [
       { "matcher": "", "hooks": [
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py", "async": true }
       ]}
