@@ -2,6 +2,8 @@
 
 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
+以 [Apache License 2.0](LICENSE) 开源。
+
 <p align="center">
   <img src="images/hero.png" width="48%" alt="clawd-mood on a coding desk, eyes showing the working face next to a MacBook" />
   <img src="images/with-claude-pandas.jpg" width="48%" alt="clawd-mood in sleeping mode flanked by two Claude panda figurines" />
@@ -270,3 +272,7 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 - **Codex 不识别插件**：检查 `codex plugin marketplace list` 看本地 marketplace 是否注册；若 marketplace 路径变了，先 `codex plugin marketplace remove clawd-mood` 再 `add` 一次
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
 - **Codex 里屏幕完全没反应**：hook 还没被信任，在 codex 里运行 `/hooks` 审阅并信任
+
+## 许可证
+
+[Apache License 2.0](LICENSE)。Copyright 2026 刘英文。归属说明见 [NOTICE](NOTICE)。
