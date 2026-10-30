@@ -1,6 +1,6 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态。每个会话是一只像素小生物，同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
 以 [Apache License 2.0](LICENSE) 开源。
 
@@ -173,23 +173,27 @@ codex plugin marketplace remove clawd-mood
 
 #### 同时挂
 
-两端可同时跑，表情会按事件到达顺序交错切换。daemon 单实例、TCP server 多客户端，互不冲突。
+两端可同时跑，每个会话各占一格，左上角标 `CC` / `CX` 区分来源。daemon 单实例、TCP server 多客户端，互不冲突。
 
-### 3. 表情对照
+### 3. 屏幕说明
 
-| 状态     | 触发                                                                  |
-| -------- | --------------------------------------------------------------------- |
-| Idle     | 会话开始或结束 / Stop 后 3 秒回归 / Codex 中断回合（Interrupt）       |
-| Thinking | 提交 prompt / 压缩上下文中（PreCompact）                              |
-| Working  | 调用工具 / 压缩完恢复（PostCompact）                                  |
-| Waiting  | 等你输入（Notification，Claude 独有）/ 等你批准（PermissionRequest）  |
-| Done     | 回答完成（3 秒瞬态）                                                  |
-| Error    | 工具失败（PostToolUseFailure）/ API 报错（StopFailure），均为 Claude 独有 |
-| Sleeping | 5 分钟无事件                                                          |
+每页最多显示 4 个会话并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。超过 4 个时每 5 秒自动翻页；别的页有会话进入 Waiting 或 Error 时会立即翻过去，停留到状态解除，最多 10 秒。
+
+每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据，读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
+
+| 状态     | 地砖色 / 图标 | 触发                                                                  |
+| -------- | ------------- | --------------------------------------------------------------------- |
+| Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / Codex 中断回合（Interrupt）       |
+| Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中（PreCompact）                              |
+| Working  | 绿 / 键盘 | 调用工具 / 压缩完恢复（PostCompact）                                  |
+| Waiting  | 黄 / 问号，格子闪烁 | 等你输入（Notification，Claude 独有）/ 等你批准（PermissionRequest）  |
+| Done     | 白 / 对勾 | 回答完成（3 秒瞬态）                                                  |
+| Error    | 红 / 叉号，红框 | 工具失败（PostToolUseFailure）/ API 报错（StopFailure），均为 Claude 独有 |
+| Sleeping | 深灰 / Z | 5 分钟无事件（Waiting 除外）；30 分钟无事件的会话会从屏幕移除        |
 
 ### 4. 快速验证
 
-挂载完，跑一个任意短任务（Claude Code 或 Codex 都行），观察屏幕表情序列：
+挂载完，跑一个任意短任务（Claude Code 或 Codex 都行），观察屏幕上该会话的状态序列：
 
 ```
 Idle → Thinking → Working → Done → Idle（Done 3 秒后自动回 Idle）
@@ -197,7 +201,7 @@ Idle → Thinking → Working → Done → Idle（Done 3 秒后自动回 Idle）
 
 Codex 特有事件验证：
 
-| 触发动作                  | 期望表情     | 对应事件             |
+| 触发动作                  | 期望状态     | 对应事件             |
 | ------------------------- | ------------ | -------------------- |
 | codex 弹出命令批准提示    | Waiting      | `PermissionRequest`  |
 | codex `/compact` 压缩中   | Thinking     | `PreCompact`         |
@@ -229,7 +233,7 @@ tail -f ${TMPDIR:-/tmp}/clawd-mood-daemon.log
 Get-Content $env:TEMP\clawd-mood-daemon.log -Wait
 ```
 
-每次事件应新增一行 `-> {"state":"...","event":"...","tool":"..."}`。
+每次事件应新增一行 `-> {"state":"...","event":"...","tool":"...","session":"...","name":"...","src":"CC"}`，有标题时还带 `title`。
 
 ---
 
