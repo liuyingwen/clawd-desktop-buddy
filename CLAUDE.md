@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概要
 
-`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI** 的运行状态，实时切换 7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。
+`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示项目名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。
 
 **跨平台桌面摆件（macOS / Linux / Windows）**。明确不做：WiFi 控制、OTA、launchd/systemd 系统级自启、自动化单元测试、蜂鸣器、多设备。Windows 端代码完成但 **untested on Windows** —— 欢迎社区验证（见 README）。Linux 同样未在 CI 验证，但 POSIX 路径与 macOS 共用，回归风险低。
 
@@ -81,11 +81,24 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 
 ## 状态机设计原则
 
-7 个状态由 hook → daemon → 固件单向推送。**有两个转移在固件本地完成**，不靠上游：
+7 个状态由 hook → daemon → 固件单向推送。状态按会话独立维护，**以下转移在固件本地完成**，不靠上游：
 
 - `Done` 进入后 3 秒（`DONE_REVERT_MS`）自动回 `Idle` —— done 是瞬态，否则会卡在笑脸
-- 任何状态在 5 分钟（`SLEEP_IDLE_MS`）没有串口消息时进入 `Sleeping`
-- 任何串口消息立即唤醒 `Sleeping`
+- 除 `Waiting` 外，会话 5 分钟（`SLEEP_IDLE_MS`）没有消息时进入 `Sleeping`；`Waiting` 不睡，避免漏掉待批准
+- 该会话的任何消息立即唤醒 `Sleeping`
+- 会话 30 分钟（`SESSION_EXPIRE_MS`）没有消息时从屏幕移除，兜底没发 `SessionEnd` 就退出的 CLI
+
+## 多会话屏幕（桌面小队）
+
+- 每页最多 4 个并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2；固件最多记 12 个（`MAX_SESSIONS`），满了淘汰最久没动静的非紧急会话
+- 超过 4 个时每 5 秒自动向左翻页（硬件没有按键），底部 4 像素页码条
+- 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒；该页页码块闪状态色
+- 会话位置稳定，新会话追加到末尾，状态变化不换位；有会话退出时后面的依次前移
+- 状态靠形状 + 颜色区分（地砖色 + 头顶图标）：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z
+- 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按单元格宽度在 UTF-8 边界截断
+- 标题来源是 CLI 内部数据，可能随版本失效，读不到时静默退回目录名：Claude Code 读 `transcript_path` 里的 `ai-title` 记录，Codex 读 `~/.codex/session_index.jsonl` 的 `thread_name`
+- 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）
+- 用 `GFXcanvas16` 整屏帧缓冲（115 KB）一次刷新，不要回到 `fillScreen` 直接画屏，会闪
 
 hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` / `SubagentStart` / `SubagentStop` 都映射到 `working`，避免表情在工具调用过程中乱跳。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
 
@@ -121,10 +134,13 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - 方向：**单向** Mac → ESP32，ESP32 不回包
 - 格式：NDJSON（换行分隔），UTF-8，115200 baud
 - 必需字段：`state`
-- 可选调试字段：`event`、`tool`
+- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX`）、`end`（`SessionEnd` 时为 `true`，移除该会话）
+- 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
+- 可选调试字段：`event`、`tool`（截断到 32 字符）
+- 单行上限 320 字节（`LINE_MAX`）；daemon 只转发，不解析会话
 - 未知 `state` 或坏 JSON：固件打 `[warn]` 到串口，不切换、不死
 
-示例：`{"state":"working","event":"PreToolUse","tool":"Bash"}`
+示例：`{"state":"working","event":"PreToolUse","tool":"Bash","session":"a00eada8","name":"clawd-mood","src":"CC"}`
 
 ## 常用命令
 
@@ -154,7 +170,7 @@ arduino-cli upload -p COM3 -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,Uplo
 - Linux: 系统包管理器装 `arduino-cli` + `uv`，加入 `dialout` 组
 - Windows: `winget install ArduinoSA.CLI astral-sh.uv`
 
-全平台都要装 ESP32 核心 + Adafruit GFX / ST7789 / ArduinoJson 库。
+全平台都要装 ESP32 核心 + Adafruit GFX / ST7789 / ArduinoJson / U8g2_for_Adafruit_GFX 库。
 
 ### 跑 daemon
 
@@ -228,7 +244,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 
 **没有自动化测试**——硬件依赖重、IO 逻辑短，靠手测 + 集成测覆盖：
 
-- **固件单独**：Arduino 串口监视器手输 7 种 JSON，肉眼确认 7 表情
+- **固件单独**：Arduino 串口监视器手输 7 种 JSON，肉眼确认 7 种状态；带不同 `session` 字段可测 1–5+ 个会话的布局和翻页
 - **daemon + 固件**：`printf '{"state":"working"}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)`（mac/linux），Windows PowerShell 见上"手动测试"段
 - **端到端**：跑真实任务（"列出当前目录"），观察 Idle → Thinking → Working → Done → Idle 序列
 - **Done 3 秒回 Idle、Sleeping 5 分钟进入**：临时把 `SLEEP_IDLE_MS` 改成 `15000UL` 缩短验证
@@ -238,11 +254,11 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 
 ## 仓库结构要点
 
-- `firmware/clawd_mood/clawd_mood.ino` —— 单文件 Arduino sketch；7 个 `drawXxx()` 函数 + `tickMoodMachine()` 计时器 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
+- `firmware/clawd_mood/clawd_mood.ino` —— 单文件 Arduino sketch；会话表 + `tickSessions()` 计时器 + `tickPaging()` 翻页 + `drawCell()` / `drawCreature()` 渲染 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
 - `plugin/.claude-plugin/plugin.json` —— Claude Code 插件清单
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
 - `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
-- `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py
+- `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现
 - `.agents/plugins/marketplace.json` —— Codex 本地 marketplace 入口
@@ -250,6 +266,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `docs/superpowers/specs/2026-06-07-clawd-mood-design.md` —— 原始设计说明书（**改架构前先读这个**）
 - `docs/superpowers/specs/2026-06-07-codex-support-design.md` —— Codex 支持设计说明书
 - `docs/superpowers/specs/2026-06-08-windows-linux-support-design.md` —— Windows + Linux 跨平台设计说明书
+- `docs/superpowers/specs/2026-10-30-multi-session-squad-design.md` —— 多会话桌面小队设计说明书
 - `docs/superpowers/plans/2026-06-07-clawd-mood-implementation.md` —— 原始 18 任务实施计划
 - `docs/superpowers/plans/2026-06-07-codex-support-implementation.md` —— Codex 支持 8 任务实施计划
 - `docs/superpowers/plans/2026-06-08-windows-linux-support-implementation.md` —— 跨平台实施计划

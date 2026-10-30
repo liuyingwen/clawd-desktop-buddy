@@ -55,7 +55,7 @@ arduino-cli core install esp32:esp32
 ### 2. 装 Arduino 库
 
 ```bash
-arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library" "ArduinoJson"
+arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library" "ArduinoJson" "U8g2_for_Adafruit_GFX"
 ```
 
 ### 3. 接线（VCC 接 3.3V，**不要接 5V**）

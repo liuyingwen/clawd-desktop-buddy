@@ -7,12 +7,16 @@
 
 Receives hook JSON on stdin (from Claude Code / Codex CLI), looks up the
 event in EVENT_TO_STATE, then opens a short TCP connection to the daemon
-and sends a single NDJSON line. On SessionStart, spawns the daemon
-detached if it is not already running. Pure stdlib (no third-party deps)
-so uv run is fast (~80-200ms cached).
+and sends a single NDJSON line tagged with the session it came from. On
+SessionStart, spawns the daemon detached if it is not already running. Pure
+stdlib (no third-party deps) so uv run is fast (~80-200ms cached).
+
+Pass "codex" as argv[1] from the Codex hook config; default source is Claude Code.
 """
 
+import hashlib
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -39,6 +43,57 @@ EVENT_TO_STATE = {
     "Interrupt":          "idle",        # Codex only
     "SessionEnd":         "idle",
 }
+
+
+def tail_lines(path: str, limit: int = 256 * 1024) -> list[str]:
+    """Last lines of a possibly huge JSONL file, newest first."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(max(0, size - limit))
+        lines = f.read().decode("utf-8", errors="replace").splitlines()
+    return (lines[1:] if size > limit else lines)[::-1]
+
+
+def read_title(payload: dict, codex: bool) -> str | None:
+    """Best-effort session title from CLI-internal files; None when unavailable."""
+    try:
+        if codex:
+            path = str(Path.home() / ".codex" / "session_index.jsonl")
+            for line in tail_lines(path):
+                entry = json.loads(line)
+                if entry.get("id") == payload.get("session_id"):
+                    return entry.get("thread_name")
+        elif payload.get("transcript_path"):
+            for line in tail_lines(payload["transcript_path"]):
+                if '"ai-title"' in line:
+                    entry = json.loads(line)
+                    if entry.get("type") == "ai-title":
+                        return entry.get("aiTitle")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
+def clean_label(text: str) -> str:
+    return "".join(c for c in text if c.isprintable())[:16]
+
+
+def session_fields(payload: dict) -> dict:
+    """Short identity for the device (labels are cut to fit its 320-byte lines)."""
+    cwd = payload.get("cwd") or os.getcwd()
+    raw_id = payload.get("session_id") or cwd
+    short_id = hashlib.sha1(raw_id.encode()).hexdigest()[:8]
+    codex = sys.argv[1:] == ["codex"]
+    fields = {
+        "session": short_id,
+        "name": clean_label(os.path.basename(cwd.rstrip("/\\\\"))) or short_id,
+        "src": "CX" if codex else "CC",
+    }
+    title = clean_label(read_title(payload, codex) or "")
+    if title:
+        fields["title"] = title
+    return fields
 
 
 def read_portfile() -> int | None:
@@ -92,7 +147,7 @@ def main() -> None:
     except json.JSONDecodeError:
         return
     event = payload.get("hook_event_name", "")
-    tool = payload.get("tool_name", "")
+    tool = (payload.get("tool_name") or "")[:32]
     state = EVENT_TO_STATE.get(event)
     if state is None:
         return
@@ -105,10 +160,13 @@ def main() -> None:
     port = read_portfile()
     if port is None:
         return  # daemon still warming up; next event will catch up
-    line = json.dumps({"state": state, "event": event, "tool": tool}) + "\n"
+    message = {"state": state, "event": event, "tool": tool, **session_fields(payload)}
+    if event == "SessionEnd":
+        message["end"] = True
+    line = json.dumps(message, ensure_ascii=False) + "\n"
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.3) as s:
-            s.sendall(line.encode())
+            s.sendall(line.encode("utf-8"))
     except OSError:
         pass  # daemon not responding; silently drop
 
