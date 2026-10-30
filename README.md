@@ -4,6 +4,17 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code*
 
 以 [Apache License 2.0](LICENSE) 开源。
 
+**把下面这段话发给你的 agent，它会照着完成安装**（硬件要先按[接线表](#3-接线vcc-接-33v不要接-5v)接好并插上 USB）：
+
+```text
+请帮我安装 clawd-mood：https://github.com/liuyingwen/clawd-desktop-buddy
+1. 克隆仓库，阅读 README.md，按其中的步骤操作。
+2. 安装依赖和固件所需的板支持、库，找到 ESP32-C3 的串口，编译并烧录固件。
+3. 判断你自己是哪个 CLI，只挂载对应的插件；有需要我手动完成的步骤（比如 Codex 的 /hooks 信任、重启应用）就告诉我。
+4. 启动 daemon，灌一条 {"state":"working"} 测试消息，然后问我屏幕有没有变化。
+需要 sudo 或修改系统配置时，先征求我的同意。
+```
+
 <p align="center">
   <img src="images/hero.png" width="48%" alt="clawd-mood on a coding desk next to a MacBook, its screen showing four sessions as a squad of pixel creatures" />
   <img src="images/with-claude-pandas.jpg" width="48%" alt="clawd-mood showing three sessions, flanked by two Claude panda figurines" />
