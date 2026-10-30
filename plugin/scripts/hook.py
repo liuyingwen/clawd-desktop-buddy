@@ -5,12 +5,15 @@
 # ///
 """clawd-mood hook — maps CLI hook events to ESP32 states via TCP.
 
-Receives hook JSON on stdin (from Claude Code / Codex CLI), looks up the
-event in EVENT_TO_STATE, then opens a short TCP connection to the daemon
-and sends a single NDJSON line. On SessionStart, spawns the daemon
-detached if it is not already running. Pure stdlib (no third-party deps)
-so uv run is fast (~80-200ms cached).
+Receives hook JSON on stdin (from Claude Code / Codex CLI / WorkBuddy /
+DeepSeek Harness), looks up the event in EVENT_TO_STATE, then opens a short
+TCP connection to the daemon and sends a single NDJSON line. On SessionStart,
+spawns the daemon detached if it is not already running. Pure stdlib (no
+third-party deps) so uv run is fast (~80-200ms cached), and DeepSeek Harness
+can run it with plain python3 (uv cannot init its cache in that sandbox).
 """
+
+from __future__ import annotations  # `int | None` on the python3 macOS ships
 
 import json
 import socket

@@ -1,0 +1,12 @@
+{
+  "name": "clawd-mood",
+  "owner": { "name": "liuyingwen" },
+  "plugins": [
+    {
+      "name": "clawd-mood",
+      "description": "Drives a clawd-mood ESP32-C3 desk mascot via USB serial, reflecting WorkBuddy / CodeBuddy Code state on a TFT display.",
+      "source": "./plugin",
+      "version": "0.2.0"
+    }
+  ]
+}

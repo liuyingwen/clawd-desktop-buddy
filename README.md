@@ -1,6 +1,6 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。两端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** 的运行状态，7 种像素眼睛表情（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
 以 [Apache License 2.0](LICENSE) 开源。
 
@@ -171,21 +171,83 @@ codex plugin marketplace remove clawd-mood
 
 > Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/scripts/hook.py` 等源文件后需要 `codex plugin remove/add` 才生效。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
 
+#### OpenCode（≥ 2.0）
+
+把插件软链到全局插件目录，然后重载：
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+ln -s /path/to/clawd-mood/plugin/adapters/opencode/clawd-mood.js ~/.config/opencode/plugins/clawd-mood.js
+opencode reload
+```
+
+必须用软链（或插件能解析回仓库的方式），插件靠真实路径定位 `scripts/hook.py`。V1 插件接口在 OpenCode 2 不生效，所以不支持 1.x。卸载：删掉这个软链。
+
+#### pi
+
+```bash
+pi install /path/to/clawd-mood/plugin/adapters/pi/clawd-mood.ts
+```
+
+卸载：`pi remove /path/to/clawd-mood/plugin/adapters/pi/clawd-mood.ts`。
+
+#### WorkBuddy / CodeBuddy Code
+
+```bash
+cd /path/to/clawd-mood
+codebuddy plugin marketplace add .
+codebuddy plugin install clawd-mood@clawd-mood
+```
+
+WorkBuddy 桌面版使用自己的配置目录，命令前加 `CODEBUDDY_CONFIG_DIR=~/.workbuddy`，再重启应用。`codebuddy` 可执行文件在 `/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy`。桌面版尚未端到端验证；从访达启动时 `PATH` 里可能没有 `uv`，屏幕没反应时先查这里。
+
+#### DeepSeek Harness
+
+通过官方的 Claude Code hook 桥接。先在要用的 profile 里装桥接包（版本与 `dsh --version` 一致）：
+
+```bash
+dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepseek-ai/dsh-hook-protocol@<版本>
+```
+
+然后在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾加一段（**两个路径都必须是绝对路径**），并重启 dsh：
+
+```yaml
+- insert:
+    - id: clawd-mood-hooks
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: /path/to/clawd-mood/plugin/hooks/hooks-dsh.json
+        pluginRoot: /path/to/clawd-mood/plugin
+```
+
+限制：桥接只支持 7 个事件，所以**不显示 waiting 和 error**，也没有压缩状态。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。桌面版的 profile 名是 `desktop`。
+
 #### 同时挂
 
-两端可同时跑，表情会按事件到达顺序交错切换。daemon 单实例、TCP server 多客户端，互不冲突。
+多端可同时跑，表情会按事件到达顺序交错切换。daemon 单实例、TCP server 多客户端，互不冲突。
 
 ### 3. 表情对照
 
 | 状态     | 触发                                                                  |
 | -------- | --------------------------------------------------------------------- |
-| Idle     | 会话开始或结束 / Stop 后 3 秒回归 / Codex 中断回合（Interrupt）       |
-| Thinking | 提交 prompt / 压缩上下文中（PreCompact）                              |
-| Working  | 调用工具 / 压缩完恢复（PostCompact）                                  |
-| Waiting  | 等你输入（Notification，Claude 独有）/ 等你批准（PermissionRequest）  |
+| Idle     | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi）   |
+| Thinking | 提交 prompt / 压缩上下文中                                            |
+| Working  | 调用工具 / 压缩完恢复                                                 |
+| Waiting  | 等你输入（Claude）/ 等你批准（DeepSeek Harness 无）                   |
 | Done     | 回答完成（3 秒瞬态）                                                  |
-| Error    | 工具失败（PostToolUseFailure）/ API 报错（StopFailure），均为 Claude 独有 |
+| Error    | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi）                |
 | Sleeping | 5 分钟无事件                                                          |
+
+各端能显示的状态：
+
+| 端               | 接入方式                  | waiting | error | 压缩 | 自动拉起 daemon |
+| ---------------- | ------------------------- | ------- | ----- | ---- | --------------- |
+| Claude Code      | 插件 hooks                | ✓       | ✓     | ✓    | ✓               |
+| Codex CLI        | 插件 hooks                | ✓       | —     | ✓    | ✓               |
+| OpenCode ≥ 2.0   | 进程内插件                | ✓       | ✓     | ✓    | ✓               |
+| pi               | 进程内扩展                | 仅扩展弹窗 | ✓  | ✓    | ✓               |
+| WorkBuddy        | 插件 hooks（同 Claude）   | ✓       | ✓     | ✓    | ✓               |
+| DeepSeek Harness | 官方 Claude Code hook 桥接 | —      | —     | —    | —               |
 
 ### 4. 快速验证
 
@@ -243,6 +305,18 @@ claude plugin marketplace remove clawd-mood
 # Codex
 codex plugin remove clawd-mood@clawd-mood
 codex plugin marketplace remove clawd-mood
+
+# OpenCode
+rm ~/.config/opencode/plugins/clawd-mood.js
+
+# pi
+pi remove /path/to/clawd-mood/plugin/adapters/pi/clawd-mood.ts
+
+# WorkBuddy / CodeBuddy Code
+codebuddy plugin uninstall clawd-mood@clawd-mood
+codebuddy plugin marketplace remove clawd-mood
+
+# DeepSeek Harness：从 cordis.patch.yml 删掉 clawd-mood-hooks 这段（别把文件删空，空 patch 会导致启动失败）
 ```
 
 停 daemon + 清理：
@@ -272,6 +346,8 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 - **Codex 不识别插件**：检查 `codex plugin marketplace list` 看本地 marketplace 是否注册；若 marketplace 路径变了，先 `codex plugin marketplace remove clawd-mood` 再 `add` 一次
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
 - **Codex 里屏幕完全没反应**：hook 还没被信任，在 codex 里运行 `/hooks` 审阅并信任
+- **OpenCode 屏幕没反应**：确认版本 ≥ 2.0、软链有效，运行 `opencode reload` 或重启后台服务让插件重新加载
+- **DeepSeek Harness 屏幕没反应**：daemon 不会被它拉起，先手动启动；再确认 profile 里装了桥接包、`configPath` 是绝对路径（路径错误时桥接只打警告，不注册 hook）
 
 ## 许可证
 
