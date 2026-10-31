@@ -94,7 +94,8 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 - 超过 4 个时每 5 秒自动向左翻页（硬件没有按键），底部 4 像素页码条
 - 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒；该页页码块闪状态色。带 `quiet` 的消息例外
 - 会话位置稳定，新会话追加到末尾，状态变化不换位；有会话退出时后面的依次前移
-- 状态靠形状 + 颜色区分（地砖色 + 头顶图标）：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z
+- 不同工具是不同角色，按 `src` 查固件的 `SKINS` 表，造型来自各自 logo：CC 橙色 Clawd、CX 戴 OpenAI 结帽子的白色小人（现图标，不是旧的云朵）、OC 黑色空心框、PI 像素 P（独眼）、DS 蓝鲸、WB 青绿猫；同一工具的多个会话长得一样，靠标签区分；未知 `src` 用 Clawd 造型 + 轮换颜色
+- 状态靠形状 + 颜色区分（地砖色 + 右上角图标）：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z
 - 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按单元格宽度在 UTF-8 边界截断
 - 标题来源是 CLI 内部数据，可能随版本失效，读不到时静默退回目录名：Claude Code 读 `transcript_path` 里的 `ai-title` 记录，Codex 读 `~/.codex/session_index.jsonl` 的 `thread_name`
 - 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）

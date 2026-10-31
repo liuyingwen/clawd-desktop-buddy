@@ -47,6 +47,23 @@ enum Mood {
   MOOD_DONE, MOOD_ERROR, MOOD_SLEEPING, MOOD_UNKNOWN
 };
 
+enum EyeStyle { EYES_SQUARE, EYES_SLASH };
+
+// Each agent's logo as a character. rows is the 12x7 torso: B body, A accent,
+// F face, anything else transparent. Columns below are in the same grid.
+struct Skin {
+  const char* src;
+  const char* rows[7];
+  uint16_t body, accent, face, eye;
+  int8_t armL, armR;      // -1 = no arm
+  int8_t legL, legR;
+  uint8_t legW;
+  int8_t eyeL, eyeR;      // eyeR -1 = single eye
+  int8_t eyeY;
+  EyeStyle eyes;
+  bool knotHat;
+};
+
 struct Session {
   char id[9];
   char name[65];    // working directory, UTF-8
@@ -295,16 +312,138 @@ void drawIcon(int16_t x, int16_t y, const uint8_t* rows, uint8_t u, uint16_t col
 
 uint16_t dimColor(uint16_t c) { return (c >> 1) & 0x7BEF; }
 
+#define RGB(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+
+const Skin SKINS[] = {
+  // First entry is also the fallback; unknown sources keep a rotating colour
+  {"CC", {".BBBBBBBBBB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBBB."},
+   RGB(218, 119, 86), 0, 0, ST77XX_BLACK, 0, 11, 2, 8, 2, 3, 7, 2, EYES_SQUARE},
+  {"CX", {"..BBBBBBBB..",      // little white buddy wearing the knot as a hat
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          "..BBBBBBBB.."},
+   RGB(16, 16, 16), 0, ST77XX_WHITE, ST77XX_BLACK, 0, 11, 3, 7, 2, 3, 7, 2, EYES_SQUARE, true},
+  {"OC", {".BBBBBBBBBB.",      // hollow black frame
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BBBBBBBBBB."},
+   RGB(16, 16, 16), 0, RGB(235, 235, 235), ST77XX_BLACK, 0, 11, 3, 7, 2, 3, 7, 2, EYES_SQUARE},
+  {"PI", {"BBBBBBBBB...",      // pixel P whose counter is a single eye, i as a leg
+          "BBBFFFFBB...",
+          "BBBFFFFBB...",
+          "BBBFFFFBB...",
+          "BBBBBB...BBB",
+          "BBBBBB...BBB",
+          "BBB......BBB"},
+   RGB(40, 40, 48), 0, ST77XX_WHITE, ST77XX_BLACK, -1, -1, 0, 9, 3, 4, -1, 1, EYES_SQUARE},
+  {"DS", {"..........BB",      // whale in profile, tail up
+          "..BBBBB..BB.",
+          ".BBBBBBB.BB.",
+          ".BBBBBBBBBB.",
+          ".BBBBBBBBB..",
+          ".AAAAAAA....",
+          "..AAAAAA...."},
+   RGB(77, 107, 254), RGB(190, 205, 255), 0, ST77XX_WHITE, 0, -1, 2, 6, 2, 2, -1, 2, EYES_SQUARE},
+  {"WB", {".B........B.",      // cat with a darker face
+          ".BB......BB.",
+          ".BBBBBBBBBB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BFFFFFFFFB.",
+          ".BBBBBBBBBB."},
+   RGB(13, 200, 165), 0, RGB(8, 120, 100), ST77XX_WHITE, 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
+};
+
+// Codex hat: the logo as 30x30, one word per row, bit 29 is the leftmost pixel
+const uint32_t KNOT[30] = {
+  0x000FC000,0x003FE000,0x00707FC0,0x00E07FE0,0x00C1E070,
+  0x01838038,0x038F0418,0x0F8C1F0C,0x0D8C7BCC,0x198CE0EC,
+  0x398FF07C,0x318F3C1C,0x318C0F0E,0x318C0F86,0x31CC0DE3,
+  0x30FC0C63,0x187C0C63,0x1C1E1C63,0x0E073C63,0x0F83FC66,
+  0x0DE3CC66,0x0C7F0C7C,0x0C1C0C78,0x06003C70,0x0700F040,
+  0x0383C0C0,0x01FF8180,0x007F8780,0x0001FE00,0x00007800
+};
+
+void drawKnot(int16_t x, int16_t y, int16_t size, uint16_t col) {
+  for (int16_t py = 0; py < size; py++) {
+    uint32_t row = KNOT[py * 30 / size];
+    for (int16_t px = 0; px < size; px++) {
+      if (row & (1UL << (29 - px * 30 / size))) canvas.fillRect(x + px, y + py, 1, 1, col);
+    }
+  }
+}
+
+const Skin& skinFor(const char* src) {
+  for (const Skin& k : SKINS) {
+    if (!strcmp(k.src, src)) return k;
+  }
+  return SKINS[0];
+}
+
+void drawTorso(const Skin& k, uint16_t body, uint16_t accent, uint16_t face,
+               int16_t x, int16_t y, uint8_t u, uint8_t step) {
+  for (uint8_t r = 0; r * step < 7; r++) {
+    for (uint8_t c = 0; c < 12; c++) {
+      char p = k.rows[r * step][c];
+      if (p != 'B' && p != 'A' && p != 'F') continue;
+      canvas.fillRect(x + c * u, y + r * u, u, u, p == 'B' ? body : p == 'A' ? accent : face);
+    }
+  }
+}
+
+void drawEye(const Skin& k, int16_t ex, int16_t ey, uint8_t u, Mood m, unsigned long now) {
+  uint16_t ink = k.eye;
+  switch (m) {
+    case MOOD_DONE:      // happy ^
+      canvas.fillRect(ex,         ey + u, u, u, ink);
+      canvas.fillRect(ex + u,     ey,     u, u, ink);
+      canvas.fillRect(ex + 2 * u, ey + u, u, u, ink);
+      break;
+    case MOOD_ERROR:     // X
+      for (uint8_t i = 0; i < 3; i++) {
+        canvas.fillRect(ex + i * u, ey + i * u,       u, u, ink);
+        canvas.fillRect(ex + i * u, ey + (2 - i) * u, u, u, ink);
+      }
+      break;
+    default: {
+      // Blink every ~6s for idle, otherwise eyes stay open
+      bool blink = m == MOOD_IDLE && (now % 6000) < 200;
+      if (k.eyes == EYES_SLASH && !blink) {
+        canvas.fillRect(ex + u, ey,     u, 2 * u, ink);
+        canvas.fillRect(ex,     ey + u, u, 2 * u, ink);
+        break;
+      }
+      int16_t h = blink ? u / 2 + 1 : 2 * u;
+      canvas.fillRect(ex, ey + (blink ? u : 0), 2 * u, h, ink);
+    }
+  }
+}
+
 // Creature grid is 12 wide x 9 tall; (x, feetY) is its bottom-left corner.
 void drawCreature(const Session& s, int16_t x, int16_t feetY, uint8_t u, unsigned long now) {
-  uint16_t body = bodyColors[s.color];
+  const Skin& k = skinFor(s.src);
+  uint16_t body = strcmp(k.src, s.src) ? bodyColors[s.color] : k.body;
   unsigned long t = now - s.moodSinceMs;
 
-  if (s.mood == MOOD_SLEEPING) {     // lying flat, eyes shut
-    body = dimColor(body);
-    canvas.fillRect(x, feetY - 4 * u, 12 * u, 4 * u, body);
-    canvas.fillRect(x + 2 * u, feetY - 2 * u - u / 2, 3 * u, u / 2 + 1, C_INK);
-    canvas.fillRect(x + 7 * u, feetY - 2 * u - u / 2, 3 * u, u / 2 + 1, C_INK);
+  if (s.mood == MOOD_SLEEPING) {     // squashed flat, eyes shut
+    drawTorso(k, dimColor(body), dimColor(k.accent), dimColor(k.face), x, feetY - 4 * u, u, 2);
+    if (k.knotHat) drawKnot(x + 6 * u - 5 * u / 2, feetY - 9 * u + u / 2, 5 * u, dimColor(body));
+    uint16_t lid = dimColor(k.eye);
+    int16_t ey = feetY - 3 * u + u / 4;
+    canvas.fillRect(x + k.eyeL * u, ey, 2 * u, u / 2 + 1, lid);
+    if (k.eyeR >= 0) canvas.fillRect(x + k.eyeR * u, ey, 2 * u, u / 2 + 1, lid);
     return;
   }
 
@@ -327,50 +466,24 @@ void drawCreature(const Session& s, int16_t x, int16_t feetY, uint8_t u, unsigne
   bool up = s.mood == MOOD_WAITING || s.mood == MOOD_DONE;
   int16_t legY = by + 7 * u;
   int16_t legH = up ? 2 * u : feetY - legY;
-  canvas.fillRect(bx + 2 * u, legY, 2 * u, legH, body);
-  canvas.fillRect(bx + 8 * u, legY, 2 * u, legH, body);
-  canvas.fillRect(bx + u, by, 10 * u, 7 * u, body);
+  canvas.fillRect(bx + k.legL * u, legY, k.legW * u, legH, body);
+  canvas.fillRect(bx + k.legR * u, legY, k.legW * u, legH, body);
+  drawTorso(k, body, k.accent, k.face, bx, by, u, 1);
+  if (k.knotHat) drawKnot(bx + 6 * u - 5 * u / 2, by - 5 * u + u / 2, 5 * u, body);
 
   // Arms: typing alternates, waiting and done throw them up
   int16_t lArm = 3, rArm = 3;
   if (s.mood == MOOD_WORKING) { bool f = (now / 150) % 2; lArm = f ? 2 : 4; rArm = f ? 4 : 2; }
   if (up) { lArm = 1; rArm = 1; }
-  canvas.fillRect(bx, by + lArm * u, u, 2 * u, body);
-  canvas.fillRect(bx + 11 * u, by + rArm * u, u, 2 * u, body);
+  if (k.armL >= 0) canvas.fillRect(bx + k.armL * u, by + lArm * u, u, 2 * u, body);
+  if (k.armR >= 0) canvas.fillRect(bx + k.armR * u, by + rArm * u, u, 2 * u, body);
 
-  // Eyes
-  int16_t ly = by + 2 * u, lx = bx + 3 * u, rx = bx + 7 * u;
-  switch (s.mood) {
-    case MOOD_DONE:      // happy ^ ^
-      canvas.fillRect(lx,     ly + u, u, u, C_INK);
-      canvas.fillRect(lx + u, ly,     u, u, C_INK);
-      canvas.fillRect(rx,     ly + u, u, u, C_INK);
-      canvas.fillRect(rx + u, ly,     u, u, C_INK);
-      break;
-    case MOOD_ERROR:     // X X
-      for (uint8_t i = 0; i < 2; i++) {
-        canvas.fillRect(lx + i * u, ly + i * u,       u, u, C_INK);
-        canvas.fillRect(lx + i * u, ly + (1 - i) * u, u, u, C_INK);
-        canvas.fillRect(rx + i * u, ly + i * u,       u, u, C_INK);
-        canvas.fillRect(rx + i * u, ly + (1 - i) * u, u, u, C_INK);
-      }
-      break;
-    case MOOD_THINKING: {  // look around
-      const int8_t look[] = {0, -1, 1, 0};
-      int16_t e = look[(now / 600) % 4] * u / 2;
-      canvas.fillRect(lx + e, ly, 2 * u, 2 * u, C_INK);
-      canvas.fillRect(rx + e, ly, 2 * u, 2 * u, C_INK);
-      break;
-    }
-    default: {
-      // Blink every ~6s for idle, otherwise eyes stay open
-      bool blink = s.mood == MOOD_IDLE && (now % 6000) < 200;
-      int16_t h = blink ? u / 2 + 1 : 2 * u;
-      int16_t off = blink ? u : 0;
-      canvas.fillRect(lx, ly + off, 2 * u, h, C_INK);
-      canvas.fillRect(rx, ly + off, 2 * u, h, C_INK);
-    }
-  }
+  // Eyes: thinking looks around
+  const int8_t look[] = {0, -1, 1, 0};
+  int16_t e = s.mood == MOOD_THINKING ? look[(now / 600) % 4] * u / 2 : 0;
+  int16_t ly = by + k.eyeY * u, lx = bx + k.eyeL * u + e;
+  drawEye(k, lx, ly, u, s.mood, now);
+  if (k.eyeR >= 0) drawEye(k, bx + k.eyeR * u + e, ly, u, s.mood, now);
 
   if (s.mood == MOOD_DONE && t < 1500) {   // confetti
     for (uint8_t i = 0; i < 6; i++) {
@@ -419,7 +532,7 @@ void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsi
 
   const uint8_t* icon = iconFor(s.mood, now);
   if (icon) {
-    drawIcon(x + (w - 7 * iu) / 2, y + iu + 1, icon, iu, stateColor(s.mood));
+    drawIcon(x + w - 8 * iu - 1, y + iu + 1, icon, iu, stateColor(s.mood));
   }
 
   // Session title (directory until one exists), cut on a UTF-8 boundary to fit

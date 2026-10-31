@@ -1,6 +1,6 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** 的运行状态。每个会话是一只像素小生物，同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** 的运行状态。每个会话是一只像素小生物（每个工具一个由 logo 拟人的角色），同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
 以 [Apache License 2.0](LICENSE) 开源。
 
@@ -243,7 +243,9 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据（目前支持 Claude Code 和 Codex），读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
 
-| 状态     | 地砖色 / 图标 | 触发                                                                  |
+不同工具显示不同的小人，造型来自各自的 logo：Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫。同一工具的多个会话长得一样，靠标题区分。
+
+| 状态     | 地砖色 / 右上角图标 | 触发                                                                  |
 | -------- | ------------- | --------------------------------------------------------------------- |
 | Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi）   |
 | Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中                                            |
