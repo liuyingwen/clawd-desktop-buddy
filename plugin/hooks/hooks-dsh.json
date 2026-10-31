@@ -24,16 +24,6 @@
       { "hooks": [
         { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.py\" dsh || true", "timeout": 5 }
       ]}
-    ],
-    "SubagentStart": [
-      { "matcher": "", "hooks": [
-        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.py\" dsh || true", "timeout": 5 }
-      ]}
-    ],
-    "SubagentStop": [
-      { "matcher": "", "hooks": [
-        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.py\" dsh || true", "timeout": 5 }
-      ]}
     ]
   }
 }

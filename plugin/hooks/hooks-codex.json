@@ -45,16 +45,6 @@
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py codex", "async": true }
       ]}
     ],
-    "SubagentStart": [
-      { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py codex", "async": true }
-      ]}
-    ],
-    "SubagentStop": [
-      { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py codex", "async": true }
-      ]}
-    ],
     "SessionEnd": [
       { "matcher": "", "hooks": [
         { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py codex" }

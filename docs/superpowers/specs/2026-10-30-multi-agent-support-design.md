@@ -32,7 +32,7 @@ OpenCode / pi ─ 进程内适配器 ──────────────�
 
 **命令式 hook 必须以 `|| true` 结尾。** `uv` 自身出错返回退出码 2，而同步 hook 的 2 表示拦截。这在 DeepSeek Harness 上实际发生过：沙箱禁止 uv 初始化缓存，结果每条 prompt 都被 `blocked`。Windows cmd 没有 `true`，但此时退出码是 1，同样不拦截。
 
-**DeepSeek Harness 走官方桥接，不写原生插件。** 原生 Cordis 插件能拿到审批等更多事件，但要发 npm 包并跟随 rc 版本的内部 API。桥接的代价是只有 7 个事件。
+**DeepSeek Harness 走官方桥接，不写原生插件。** 原生 Cordis 插件能拿到审批等更多事件，但要发 npm 包并跟随 rc 版本的内部 API。桥接的代价是只有 5 个事件（桥接支持 7 个，`SubagentStart` / `SubagentStop` 因会盖掉 `done` 而不挂）。
 
 **OpenCode 只支持 2.0 及以上。** V1 插件接口在 2.0 不运行，本机也只有 2.0 可测，不保留无法验证的 V1 代码。
 

@@ -13,7 +13,7 @@ const HOOK_PY = join(dirname(realpathSync(fileURLToPath(import.meta.url))), ".."
 const PORTFILE = join(tmpdir(), "clawd-mood.port");
 const IDENTITY = { session: `pi${process.pid}`.slice(0, 8), name: basename(process.cwd()).slice(0, 16), src: "PI" };
 
-function send(state: string, event: string, tool = "", end = false): Promise<void> {
+function send(state: string, event: string, tool = "", end = false, quiet = false): Promise<void> {
   return new Promise((resolve) => {
     let port: number;
     try {
@@ -26,7 +26,7 @@ function send(state: string, event: string, tool = "", end = false): Promise<voi
     socket.on("error", () => {}); // daemon not responding; silently drop
     socket.on("close", () => resolve());
     socket.setTimeout(300, () => socket.destroy());
-    socket.end(JSON.stringify({ state, event, tool, ...IDENTITY, ...(end ? { end } : {}) }) + "\n");
+    socket.end(JSON.stringify({ state, event, tool, ...IDENTITY, ...(end ? { end } : {}), ...(quiet ? { quiet } : {}) }) + "\n");
   });
 }
 
@@ -64,7 +64,8 @@ export default function (pi: any): void {
     send("working", "tool_execution_start", event.toolName);
   });
   pi.on("tool_execution_end", (event: any) => {
-    send(event.isError ? "error" : "working", "tool_execution_end", event.toolName);
+    // A failed tool doesn't stop the agent; don't jump pages for it.
+    send(event.isError ? "error" : "working", "tool_execution_end", event.toolName, false, event.isError);
   });
   pi.on("message_end", (event: any) => {
     if (event.message?.role === "assistant") failed = event.message.stopReason === "error";

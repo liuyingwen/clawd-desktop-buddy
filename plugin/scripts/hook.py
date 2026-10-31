@@ -40,14 +40,16 @@ EVENT_TO_STATE = {
     "Notification":       "waiting",     # Claude Code only
     "Stop":               "done",
     "StopFailure":        "error",       # Claude Code only
-    "SubagentStart":      "working",
-    "SubagentStop":       "working",
     "PermissionRequest":  "waiting",
     "PreCompact":         "thinking",
     "PostCompact":        "working",
     "Interrupt":          "idle",        # Codex only
     "SessionEnd":         "idle",
 }
+
+# Claude Code also notifies when a finished turn sits idle or auth succeeds;
+# neither is something pending. Payloads without a type keep meaning waiting.
+WAITING_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog"}
 
 
 def tail_lines(path: str, limit: int = 256 * 1024) -> list[str]:
@@ -162,6 +164,8 @@ def main() -> None:
     state = EVENT_TO_STATE.get(event)
     if state is None:
         return
+    if event == "Notification" and payload.get("notification_type", "permission_prompt") not in WAITING_NOTIFICATIONS:
+        return
 
     if event == "SessionStart":
         ensure_daemon_running()
@@ -174,6 +178,8 @@ def main() -> None:
     message = {"state": state, "event": event, "tool": tool, **session_fields(payload)}
     if event == "SessionEnd":
         message["end"] = True
+    if event == "PostToolUseFailure":
+        message["quiet"] = True  # the agent carries on; show it but don't jump pages
     line = json.dumps(message, ensure_ascii=False) + "\n"
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.3) as s:

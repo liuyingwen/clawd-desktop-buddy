@@ -20,6 +20,7 @@
 
 #define DONE_REVERT_MS    3000UL           // Done → Idle after 3s
 #define SLEEP_IDLE_MS     (5UL*60*1000)    // 5 minutes without events
+#define SLEEP_WORKING_MS  (15UL*60*1000)   // a long tool call sends nothing while it runs
 #define SESSION_EXPIRE_MS (30UL*60*1000)   // forget sessions that never sent SessionEnd
 
 #define MAX_SESSIONS   12
@@ -54,6 +55,7 @@ struct Session {
   Mood mood;
   uint8_t color;
   unsigned long lastEventMs;
+  bool quiet;                              // urgent state that shouldn't jump pages
   unsigned long moodSinceMs;
 };
 
@@ -151,6 +153,7 @@ int8_t addSession(const char* id, const char* name, const char* src) {
   s.mood = MOOD_IDLE;
   s.color = nextColor++ % 6;
   s.moodSinceMs = millis();
+  s.quiet = false;
   return sessionCount++;
 }
 
@@ -171,7 +174,8 @@ void tickSessions() {
     }
     if (s.mood == MOOD_DONE && now - s.moodSinceMs > DONE_REVERT_MS) setMood(s, MOOD_IDLE);
     // A pending approval stays visible until it is answered or the session expires
-    if (s.mood != MOOD_WAITING && s.mood != MOOD_SLEEPING && quiet > SLEEP_IDLE_MS) {
+    unsigned long sleepAfter = s.mood == MOOD_WORKING ? SLEEP_WORKING_MS : SLEEP_IDLE_MS;
+    if (s.mood != MOOD_WAITING && s.mood != MOOD_SLEEPING && quiet > sleepAfter) {
       setMood(s, MOOD_SLEEPING);
     }
   }
@@ -208,10 +212,12 @@ void handleLine(const char* line) {
   Mood prev = s.mood;
   setMood(s, next);
   s.lastEventMs = millis();
-  if (isUrgent(next) && !isUrgent(prev)) {
+  bool quiet = doc["quiet"] | false;
+  if (isUrgent(next) && !quiet && (!isUrgent(prev) || s.quiet)) {
     strlcpy(urgentId, s.id, sizeof(urgentId));
     urgentUntilMs = millis() + URGENT_HOLD_MS;
   }
+  s.quiet = quiet;
 }
 
 void pollSerial() {
@@ -477,7 +483,7 @@ void drawPager(uint8_t pages, uint8_t active, unsigned long now) {
     uint16_t col = p == active ? C_DONE : C_SLEEPING;
     // Pages holding an urgent session blink in that state's colour
     for (uint8_t i = p * PER_PAGE; i < sessionCount && i < (p + 1) * PER_PAGE; i++) {
-      if (isUrgent(sessions[i].mood) && (now / 250) % 2) col = stateColor(sessions[i].mood);
+      if (isUrgent(sessions[i].mood) && !sessions[i].quiet && (now / 250) % 2) col = stateColor(sessions[i].mood);
     }
     canvas.fillRect(x, DISP_H - PAGER_H, dotW, PAGER_H, col);
   }

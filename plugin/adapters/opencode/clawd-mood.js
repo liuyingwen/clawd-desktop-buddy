@@ -15,7 +15,7 @@ const PORTFILE = join(tmpdir(), "clawd-mood.port");
 // One creature per process: child sessions stay folded into their parent.
 const IDENTITY = { session: `oc${process.pid}`.slice(0, 8), name: basename(process.cwd()).slice(0, 16), src: "OC" };
 
-function send(state, event) {
+function send(state, event, extra = {}) {
   let port;
   try {
     port = Number(readFileSync(PORTFILE, "utf8").trim());
@@ -26,7 +26,7 @@ function send(state, event) {
   const socket = connect(port, "127.0.0.1");
   socket.on("error", () => {}); // daemon not responding; silently drop
   socket.setTimeout(300, () => socket.destroy());
-  socket.end(JSON.stringify({ state, event, tool: "", ...IDENTITY }) + "\n");
+  socket.end(JSON.stringify({ state, event, tool: "", ...IDENTITY, ...extra }) + "\n");
 }
 
 function startDaemon() {
@@ -81,7 +81,7 @@ export default {
           send("working", type);
           break;
         case "session.tool.failed":
-          send("error", type);
+          send("error", type, { quiet: true }); // the agent carries on; don't jump pages
           break;
         case "permission.asked":
         case "form.created":

@@ -84,7 +84,7 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 7 个状态由 hook → daemon → 固件单向推送。状态按会话独立维护，**以下转移在固件本地完成**，不靠上游：
 
 - `Done` 进入后 3 秒（`DONE_REVERT_MS`）自动回 `Idle` —— done 是瞬态，否则会卡在笑脸
-- 除 `Waiting` 外，会话 5 分钟（`SLEEP_IDLE_MS`）没有消息时进入 `Sleeping`；`Waiting` 不睡，避免漏掉待批准
+- 会话 5 分钟（`SLEEP_IDLE_MS`）没有消息时进入 `Sleeping`；`Working` 放宽到 15 分钟（`SLEEP_WORKING_MS`），长工具调用期间没有事件；`Waiting` 不睡，避免漏掉待批准
 - 该会话的任何消息立即唤醒 `Sleeping`
 - 会话 30 分钟（`SESSION_EXPIRE_MS`）没有消息时从屏幕移除，兜底没发 `SessionEnd` 就退出的 CLI
 
@@ -92,7 +92,7 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 
 - 每页最多 4 个并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2；固件最多记 12 个（`MAX_SESSIONS`），满了淘汰最久没动静的非紧急会话
 - 超过 4 个时每 5 秒自动向左翻页（硬件没有按键），底部 4 像素页码条
-- 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒；该页页码块闪状态色
+- 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒；该页页码块闪状态色。带 `quiet` 的消息例外
 - 会话位置稳定，新会话追加到末尾，状态变化不换位；有会话退出时后面的依次前移
 - 状态靠形状 + 颜色区分（地砖色 + 头顶图标）：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z
 - 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按单元格宽度在 UTF-8 边界截断
@@ -100,7 +100,7 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 - 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）
 - 用 `GFXcanvas16` 整屏帧缓冲（115 KB）一次刷新，不要回到 `fillScreen` 直接画屏，会闪
 
-hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` / `SubagentStart` / `SubagentStop` 都映射到 `working`，避免表情在工具调用过程中乱跳。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
+hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` 都映射到 `working`，避免表情在工具调用过程中乱跳。**不要挂 `SubagentStart` / `SubagentStop`**：`SubagentStop` 会在 `Stop` 之后到达（实测 13 次里 10 次，且没有对应的 `SubagentStart`），映射成 `working` 会盖掉 `done` 并卡到睡眠；真实子代理结束后主代理还会发 `PreToolUse` 或 `Stop`，不丢状态。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
 
 **两端共有的事件映射**：
 
@@ -113,7 +113,7 @@ hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToo
 
 **单端独有的事件映射**，另一端不会触发，互不干扰：
 
-- Claude Code：`PostToolUseFailure` → `error`、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`
+- Claude Code：`PostToolUseFailure` → `error`（带 `quiet`，agent 还在继续，不翻页）、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`（只认 `notification_type` 为 `permission_prompt` / `elicitation_dialog` 或缺失的情况，`idle_prompt` 这类不是待处理事项）
 - Codex：`Interrupt` → `idle`（用户中断回合）
 
 state 枚举（小写、严格匹配）：`idle | thinking | working | waiting | done | error | sleeping`。固件里 `parseMood` 用 `strcmp`，**大小写敏感**。
@@ -134,7 +134,7 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 新 agent 优先复用 `hook.py`；只有进程内扩展才自己映射状态。设计见 `docs/superpowers/specs/2026-10-30-multi-agent-support-design.md`。
 
 - **WorkBuddy / CodeBuddy Code**：复用 `hooks/hooks.json`（引擎同时注入 `CLAUDE_PLUGIN_ROOT` 和 `CODEBUDDY_PLUGIN_ROOT`），只多一份 `plugin/.codebuddy-plugin/plugin.json` 和根目录 `.codebuddy-plugin/marketplace.json`
-- **DeepSeek Harness**：官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 7 个事件。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
+- **DeepSeek Harness**：官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 5 个事件。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
 - **OpenCode ≥ 2.0 / pi**：`plugin/adapters/` 下的进程内适配器，事件直接映射成 state 走 TCP，`hook.py` 只用来拉起 daemon（`source: compact`，不推状态）。**不要改成每个事件起一个 uv**：`opencode run` 在回合结束约 8ms 后就退出，最后的 done 会丢
 
 **容易踩坑**：
@@ -150,6 +150,7 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - 必需字段：`state`
 - 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS` / `WB`，WorkBuddy 与 Claude Code 共用 hooks.json，靠 `CODEBUDDY_PLUGIN_ROOT` 环境变量区分）、`end`（`SessionEnd` 时为 `true`，移除该会话）
 - 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
+- 可选字段：`quiet`（`true` 时 waiting / error 只显示不翻页，用于工具失败）
 - 可选调试字段：`event`、`tool`（截断到 32 字符）
 - 单行上限 320 字节（`LINE_MAX`）；daemon 只转发，不解析会话
 - 未知 `state` 或坏 JSON：固件打 `[warn]` 到串口，不切换、不死
@@ -212,7 +213,7 @@ PYTHONUNBUFFERED=1 ./plugin/scripts/daemon.py
 claude --plugin-dir /absolute/path/to/clawd-mood/plugin
 ```
 
-在 Claude Code 里 `/hooks` 确认 14 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / Notification / PreCompact / PostCompact / Stop / StopFailure / SubagentStart / SubagentStop / SessionEnd）。
+在 Claude Code 里 `/hooks` 确认 12 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / Notification / PreCompact / PostCompact / Stop / StopFailure / SubagentStart / SubagentStop / SessionEnd）。
 
 **Codex CLI**（≥ 0.133.0）：
 
@@ -222,7 +223,7 @@ codex plugin marketplace add .          # 注册本地 marketplace（读 .agents
 codex plugin add clawd-mood@clawd-mood  # 装插件（拷贝到 ~/.codex/plugins/cache/）
 ```
 
-在 codex 里运行 `/hooks` 审阅并**信任** 12 个事件（比 Claude Code 少 `PostToolUseFailure` / `Notification` / `StopFailure`，多 `Interrupt`）：未信任的 hook 不会执行，hook 内容变更后要重新信任。之后任意目录 `codex` 就能用。卸载：`codex plugin remove clawd-mood@clawd-mood`。
+在 codex 里运行 `/hooks` 审阅并**信任** 10 个事件（比 Claude Code 少 `PostToolUseFailure` / `Notification` / `StopFailure`，多 `Interrupt`）：未信任的 hook 不会执行，hook 内容变更后要重新信任。之后任意目录 `codex` 就能用。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 
 **Codex 改 plugin 后必须重装**：codex 是把 plugin 内容**拷贝**到 `~/.codex/plugins/cache/clawd-mood/clawd-mood/<version>/`，不是 symlink。修改了源仓库的 `plugin/scripts/hook.py` / `hooks/hooks-codex.json` 后，codex 仍跑 cache 里的旧版本。开发时改完执行：
 
@@ -273,10 +274,10 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `firmware/clawd_mood/clawd_mood.ino` —— 单文件 Arduino sketch；会话表 + `tickSessions()` 计时器 + `tickPaging()` 翻页 + `drawCell()` / `drawCreature()` 渲染 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
 - `plugin/.claude-plugin/plugin.json` —— Claude Code 插件清单
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
-- `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
-- `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
+- `plugin/hooks/hooks.json` —— Claude Code 12 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
+- `plugin/hooks/hooks-codex.json` —— Codex 10 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
 - `plugin/adapters/opencode/clawd-mood.js`、`plugin/adapters/pi/clawd-mood.ts` —— 进程内适配器，直接走 TCP，自带 `session`（按进程）/ `name` / `src`
-- `plugin/hooks/hooks-dsh.json` —— DeepSeek Harness 桥接用，7 个事件，`python3` 启动，传 `dsh` 参数标记来源
+- `plugin/hooks/hooks-dsh.json` —— DeepSeek Harness 桥接用，5 个事件，`python3` 启动，传 `dsh` 参数标记来源
 - `plugin/.codebuddy-plugin/plugin.json`、`.codebuddy-plugin/marketplace.json` —— WorkBuddy / CodeBuddy Code 清单
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现

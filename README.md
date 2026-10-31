@@ -146,7 +146,7 @@ claude plugin marketplace add ./
 claude plugin install clawd-mood@clawd-mood
 ```
 
-之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 14 个事件全挂上。卸载：
+之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 12 个事件全挂上。卸载：
 
 ```bash
 claude plugin uninstall clawd-mood@clawd-mood
@@ -169,7 +169,7 @@ codex plugin marketplace add .
 codex plugin add clawd-mood@clawd-mood
 ```
 
-**Codex 默认不执行未信任的 hook**：装完后在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 12 个事件，否则屏幕不会有反应。信任绑定 hook 内容的哈希，hook 变更后需要重新信任。
+**Codex 默认不执行未信任的 hook**：装完后在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 10 个事件，否则屏幕不会有反应。信任绑定 hook 内容的哈希，hook 变更后需要重新信任。
 
 之后任意目录 `codex` 即可。
 
@@ -231,7 +231,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
         pluginRoot: /path/to/clawd-mood/plugin
 ```
 
-限制：桥接只支持 7 个事件，所以**不显示 waiting 和 error**，也没有压缩状态。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。桌面版的 profile 名是 `desktop`。
+限制：桥接只支持 5 个事件，所以**不显示 waiting 和 error**，也没有压缩状态。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。桌面版的 profile 名是 `desktop`。
 
 #### 同时挂
 
@@ -239,7 +239,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 ### 3. 屏幕说明
 
-每页最多显示 4 个会话并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。超过 4 个时每 5 秒自动翻页；别的页有会话进入 Waiting 或 Error 时会立即翻过去，停留到状态解除，最多 10 秒。
+每页最多显示 4 个会话并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。超过 4 个时每 5 秒自动翻页；别的页有会话进入 Waiting 或 Error 时会立即翻过去，停留到状态解除，最多 10 秒；单次工具失败只显示 Error，不翻页，因为 agent 通常会继续干活。
 
 每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据（目前支持 Claude Code 和 Codex），读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
 
@@ -248,10 +248,10 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 | Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi）   |
 | Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中                                            |
 | Working  | 绿 / 键盘 | 调用工具 / 压缩完恢复                                                 |
-| Waiting  | 黄 / 问号，格子闪烁 | 等你输入（Claude）/ 等你批准（DeepSeek Harness 无）                   |
+| Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 无）                             |
 | Done     | 白 / 对勾 | 回答完成（3 秒瞬态）                                                  |
 | Error    | 红 / 叉号，红框 | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi）                 |
-| Sleeping | 深灰 / Z | 5 分钟无事件（Waiting 除外）；30 分钟无事件的会话会从屏幕移除        |
+| Sleeping | 深灰 / Z | 5 分钟无事件（Working 为 15 分钟，Waiting 不睡）；30 分钟无事件的会话会从屏幕移除 |
 
 各端能显示的状态：
 
