@@ -1,0 +1,22 @@
+{
+  "name": "clawd-mood-dsh",
+  "version": "0.2.0",
+  "description": "clawd-mood for DeepSeek Harness: shows each session as a creature on the ESP32 desk screen",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "scripts"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "prepack": "mkdir -p scripts && cp ../../scripts/hook.py ../../scripts/daemon.py scripts/",
+    "pack:tarball": "mkdir -p dist && npm pack --pack-destination dist"
+  }
+}

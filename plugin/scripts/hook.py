@@ -36,7 +36,7 @@ EVENT_TO_STATE = {
     "UserPromptSubmit":   "thinking",
     "PreToolUse":         "working",
     "PostToolUse":        "working",
-    "PostToolUseFailure": "error",       # Claude Code only
+    "PostToolUseFailure": "working",     # Claude Code only; e.g. `diff` exiting 1, the agent carries on
     "Notification":       "waiting",     # Claude Code only
     "Stop":               "done",
     "StopFailure":        "error",       # Claude Code only
@@ -45,6 +45,8 @@ EVENT_TO_STATE = {
     "PostCompact":        "working",
     "Interrupt":          "idle",        # Codex only
     "SessionEnd":         "idle",
+    "SubagentStart":      "thinking",    # only ever drives a follower, see main()
+    "SubagentStop":       "done",
 }
 
 # Claude Code also notifies when a finished turn sits idle or auth succeeds;
@@ -167,10 +169,18 @@ def main() -> None:
     if event == "Notification" and payload.get("notification_type", "permission_prompt") not in WAITING_NOTIFICATIONS:
         return
 
+    # WorkBuddy can set agent_id from any session's store id, so outside the subagent
+    # lifecycle events require a type too (its SubagentStart has an id but no type)
+    agent_id = payload.get("agent_id") if payload.get("agent_type") or event.startswith("Subagent") else None
+    if event.startswith("Subagent") and not agent_id:
+        return  # can't tell which follower it means; must not touch the main state
+
     if event == "SessionStart":
         ensure_daemon_running()
         if payload.get("source") == "compact":
             return  # fires mid-turn after compaction; don't drop back to idle
+        if sys.argv[1:] == ["dsh"]:
+            return  # dsh fires this for every session it restores at startup and never ends them
 
     port = read_portfile()
     if port is None:
@@ -178,8 +188,10 @@ def main() -> None:
     message = {"state": state, "event": event, "tool": tool, **session_fields(payload)}
     if event == "SessionEnd":
         message["end"] = True
-    if event == "PostToolUseFailure":
-        message["quiet"] = True  # the agent carries on; show it but don't jump pages
+    if agent_id:
+        message["agent"] = agent_id[-6:]
+        if event == "SubagentStop":
+            message["gone"] = True
     line = json.dumps(message, ensure_ascii=False) + "\n"
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.3) as s:

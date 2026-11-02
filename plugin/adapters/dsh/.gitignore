@@ -1,0 +1,3 @@
+# copied in by prepack so the tarball can start the daemon on its own
+scripts/
+dist/

@@ -99,9 +99,10 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 - 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按单元格宽度在 UTF-8 边界截断
 - 标题来源是 CLI 内部数据，可能随版本失效，读不到时静默退回目录名：Claude Code 读 `transcript_path` 里的 `ai-title` 记录，Codex 读 `~/.codex/session_index.jsonl` 的 `thread_name`
 - 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）
+- 子代理是主小人头顶的一排小跟班（同款造型 12×9px，单会话全屏时翻倍），放不下显示 `+N`。动效：出现时落下、启动时看左右、工作时错拍跳动敲键盘、等待时变黄高跳（主小人同时显示 waiting 并翻页）、`SubagentStop` 后撒彩屑 1.5 秒再消失；收不到结束事件时 15 分钟（`FOLLOWER_EXPIRE_MS`）后移除。所有 agent 都支持，同一只主小人跟自己工具的同款跟班。标签只由主代理更新
 - 用 `GFXcanvas16` 整屏帧缓冲（115 KB）一次刷新，不要回到 `fillScreen` 直接画屏，会闪
 
-hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` 都映射到 `working`，避免表情在工具调用过程中乱跳。**不要挂 `SubagentStart` / `SubagentStop`**：`SubagentStop` 会在 `Stop` 之后到达（实测 13 次里 10 次，且没有对应的 `SubagentStart`），映射成 `working` 会盖掉 `done` 并卡到睡眠；真实子代理结束后主代理还会发 `PreToolUse` 或 `Stop`，不丢状态。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
+hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` 都映射到 `working`，避免表情在工具调用过程中乱跳。**子代理不驱动主小人**：带 `agent_id` 的事件只更新头顶的小跟班；`SubagentStop` 常在主代理 `Stop` 之后才到（实测 13 次里 10 次），所以它只能移除跟班，不能改主状态，否则会盖掉 `done` 并卡到睡眠。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
 
 **两端共有的事件映射**：
 
@@ -110,11 +111,11 @@ hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToo
 - `PostCompact` → `working`（压缩完成回到工作流）
 - `SessionEnd` → `idle`（会话退出，避免停在 `working`）
 
-`SessionStart` 的 `source` 为 `compact` 时只探活、不推状态：它在回合中途触发，推 `idle` 会打断工作表情。
+`SessionStart` 的 `source` 为 `compact` 时只探活、不推状态：它在回合中途触发，推 `idle` 会打断工作表情。DeepSeek Harness 的 `SessionStart` 也一律不推：dsh 启动时会为每个恢复的历史会话各发一次，又没有 `SessionEnd`，屏幕上会多出一堆假会话，所以它的会话从第一条 `UserPromptSubmit` 才上屏。
 
 **单端独有的事件映射**，另一端不会触发，互不干扰：
 
-- Claude Code：`PostToolUseFailure` → `error`（带 `quiet`，agent 还在继续，不翻页）、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`（只认 `notification_type` 为 `permission_prompt` / `elicitation_dialog` 或缺失的情况，`idle_prompt` 这类不是待处理事项）
+- Claude Code：`PostToolUseFailure` → `working`（`diff` 退出码 1 这类很常见，agent 还在继续，不算错误；其他 agent 的工具失败同样处理）、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`（只认 `notification_type` 为 `permission_prompt` / `elicitation_dialog` 或缺失的情况，`idle_prompt` 这类不是待处理事项）
 - Codex：`Interrupt` → `idle`（用户中断回合）
 
 state 枚举（小写、严格匹配）：`idle | thinking | working | waiting | done | error | sleeping`。固件里 `parseMood` 用 `strcmp`，**大小写敏感**。
@@ -135,13 +136,15 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 新 agent 优先复用 `hook.py`；只有进程内扩展才自己映射状态。设计见 `docs/superpowers/specs/2026-10-30-multi-agent-support-design.md`。
 
 - **WorkBuddy / CodeBuddy Code**：复用 `hooks/hooks.json`（引擎同时注入 `CLAUDE_PLUGIN_ROOT` 和 `CODEBUDDY_PLUGIN_ROOT`），只多一份 `plugin/.codebuddy-plugin/plugin.json` 和根目录 `.codebuddy-plugin/marketplace.json`
-- **DeepSeek Harness**：官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 5 个事件。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
+- **DeepSeek Harness**：两条路线，二选一。原生插件 `plugin/adapters/dsh/`（推荐，桌面版唯一可用：`dsh` 命令行拒绝操作 `desktop` profile，只能在桌面版插件管理里装 `npm run pack:tarball` 打出的 tgz），订阅 Cordis 事件直接走 TCP，按 `session.header.id` 取 8 位 sha1 分会话，`origin: subagent` 显示为小跟班（嵌套的归到顶层会话；子代理审批策略固定为 never，不会 waiting），不监听 `agent/created`（它也为启动时恢复的历史会话触发）。备选是官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 5 个事件，只用于命令行 / web 版。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
 - **OpenCode ≥ 2.0 / pi**：`plugin/adapters/` 下的进程内适配器，事件直接映射成 state 走 TCP，`hook.py` 只用来拉起 daemon（`source: compact`，不推状态）。**不要改成每个事件起一个 uv**：`opencode run` 在回合结束约 8ms 后就退出，最后的 done 会丢
 
 **容易踩坑**：
 - `hooks.json` / `hooks-dsh.json` 的命令结尾必须带 `|| true`。`uv` 自身出错退出码是 2，而同步 hook 的 2 表示拦截，会把用户的 prompt 全部挡掉
 - OpenCode 1.x 的 `event` / `tool.execute.*` 接口在 2.0 不运行；2.0 的事件名是 `session.execution.*`、`session.tool.*`，且 payload 在 `data` 上
-- pi 的 `agent_end` 不代表结束（可能重试、压缩），完成信号是 `agent_settled`；pi 的 subagent 是子进程，靠 `CLAWD_MOOD_PI_OWNER` 环境变量只让顶层进程驱动屏幕
+- pi 的 `agent_end` 不代表结束（可能重试、压缩），完成信号是 `agent_settled`；pi 的 subagent 是子进程，靠 `CLAWD_MOOD_PI_OWNER` 环境变量让顶层进程驱动主小人，子进程只发小跟班消息
+- 各家子代理的 `session_id`：Claude Code / WorkBuddy / Codex 都是父会话的（Codex 的 `agent_id` 是子线程 ID）。WorkBuddy 的 `agent_id` 来自 session 的 `storeId`，实测主会话带 `agent_type: cli` 但没有 `agent_id`，`SubagentStart` 有 `agent_id` 但没有 `agent_type`，所以 `hook.py` 对工具事件要求两者都有，对 `Subagent*` 只要 `agent_id`
+- `codex exec` 回合结束后立刻退出，异步的 `Stop` / 紧贴结尾的 `SubagentStop` 会丢（实测），靠同步的 `SessionEnd` 兜底移除会话，所以验证 Codex 结束信号时要让主代理在子代理结束后再多跑几秒
 - CodeBuddy 的 `--plugin-dir` 下事件会触发两次（marketplace 安装不会），状态相同，无害
 
 ## 串口协议
@@ -151,7 +154,8 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - 必需字段：`state`
 - 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS` / `WB`，WorkBuddy 与 Claude Code 共用 hooks.json，靠 `CODEBUDDY_PLUGIN_ROOT` 环境变量区分）、`end`（`SessionEnd` 时为 `true`，移除该会话）
 - 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
-- 可选字段：`quiet`（`true` 时 waiting / error 只显示不翻页，用于工具失败）
+- 子代理字段：`agent`（`agent_id` 后 6 位，有它时只更新小跟班，不改主状态）、`gone`（`SubagentStop` 时为 `true`）
+- 可选字段：`quiet`（`true` 时 waiting / error 只显示不翻页；固件保留支持，目前上游不发送）
 - 可选调试字段：`event`、`tool`（截断到 32 字符）
 - 单行上限 320 字节（`LINE_MAX`）；daemon 只转发，不解析会话
 - 未知 `state` 或坏 JSON：固件打 `[warn]` 到串口，不切换、不死
@@ -214,7 +218,7 @@ PYTHONUNBUFFERED=1 ./plugin/scripts/daemon.py
 claude --plugin-dir /absolute/path/to/clawd-mood/plugin
 ```
 
-在 Claude Code 里 `/hooks` 确认 12 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / Notification / PreCompact / PostCompact / Stop / StopFailure / SubagentStart / SubagentStop / SessionEnd）。
+在 Claude Code 里 `/hooks` 确认 14 个事件都挂上（SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PermissionRequest / Notification / PreCompact / PostCompact / Stop / StopFailure / SubagentStart / SubagentStop / SessionEnd）。
 
 **Codex CLI**（≥ 0.133.0）：
 
@@ -224,7 +228,7 @@ codex plugin marketplace add .          # 注册本地 marketplace（读 .agents
 codex plugin add clawd-mood@clawd-mood  # 装插件（拷贝到 ~/.codex/plugins/cache/）
 ```
 
-在 codex 里运行 `/hooks` 审阅并**信任** 10 个事件（比 Claude Code 少 `PostToolUseFailure` / `Notification` / `StopFailure`，多 `Interrupt`）：未信任的 hook 不会执行，hook 内容变更后要重新信任。之后任意目录 `codex` 就能用。卸载：`codex plugin remove clawd-mood@clawd-mood`。
+在 codex 里运行 `/hooks` 审阅并**信任** 12 个事件（比 Claude Code 少 `PostToolUseFailure` / `Notification` / `StopFailure`，多 `Interrupt`）：未信任的 hook 不会执行，hook 内容变更后要重新信任。之后任意目录 `codex` 就能用。卸载：`codex plugin remove clawd-mood@clawd-mood`。
 
 **Codex 改 plugin 后必须重装**：codex 是把 plugin 内容**拷贝**到 `~/.codex/plugins/cache/clawd-mood/clawd-mood/<version>/`，不是 symlink。修改了源仓库的 `plugin/scripts/hook.py` / `hooks/hooks-codex.json` 后，codex 仍跑 cache 里的旧版本。开发时改完执行：
 
@@ -275,9 +279,10 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `firmware/clawd_mood/clawd_mood.ino` —— 单文件 Arduino sketch；会话表 + `tickSessions()` 计时器 + `tickPaging()` 翻页 + `drawCell()` / `drawCreature()` 渲染 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
 - `plugin/.claude-plugin/plugin.json` —— Claude Code 插件清单
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
-- `plugin/hooks/hooks.json` —— Claude Code 12 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
-- `plugin/hooks/hooks-codex.json` —— Codex 10 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
+- `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`
+- `plugin/hooks/hooks-codex.json` —— Codex 12 个事件（含 Interrupt），除 `SessionEnd`（Codex 强制同步）外全 `async: true`，同一个 hook.py，命令多传 `codex` 参数标记来源
 - `plugin/adapters/opencode/clawd-mood.js`、`plugin/adapters/pi/clawd-mood.ts` —— 进程内适配器，直接走 TCP，自带 `session`（按进程）/ `name` / `src`
+- `plugin/adapters/dsh/` —— DeepSeek Harness 原生插件包（`index.js` + `cordis.patch.yml`），`prepack` 把 hook.py / daemon.py 拷进包里，tgz 脱离仓库也能拉起 daemon
 - `plugin/hooks/hooks-dsh.json` —— DeepSeek Harness 桥接用，5 个事件，`python3` 启动，传 `dsh` 参数标记来源
 - `plugin/.codebuddy-plugin/plugin.json`、`.codebuddy-plugin/marketplace.json` —— WorkBuddy / CodeBuddy Code 清单
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）

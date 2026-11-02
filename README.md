@@ -146,7 +146,7 @@ claude plugin marketplace add ./
 claude plugin install clawd-mood@clawd-mood
 ```
 
-之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 12 个事件全挂上。卸载：
+之后任意目录跑 `claude` 都自动挂上，无需 `--plugin-dir`。`/hooks` 确认 14 个事件全挂上。卸载：
 
 ```bash
 claude plugin uninstall clawd-mood@clawd-mood
@@ -214,7 +214,17 @@ WorkBuddy 桌面版使用自己的配置目录，命令前加 `CODEBUDDY_CONFIG_
 
 #### DeepSeek Harness
 
-通过官方的 Claude Code hook 桥接。先在要用的 profile 里装桥接包（版本与 `dsh --version` 一致）：
+有两种接法，**二选一，不要同装**，否则每个事件会推两次。
+
+**原生插件（推荐，桌面版只能用这种）**：在进程内直接把事件映射成状态，能显示 waiting 和 error，会自动拉起 daemon，dsh 启动时恢复的历史会话不会上屏。先打包：
+
+```bash
+cd plugin/adapters/dsh && npm run pack:tarball   # 产出 dist/clawd-mood-dsh-<版本>.tgz，自带 hook.py / daemon.py
+```
+
+桌面版：在插件管理里填这个 `.tgz` 的绝对路径安装，装完即启用。命令行 / web 版：`dsh plugin --profile web add /绝对路径/clawd-mood-dsh-<版本>.tgz`，然后重启 dsh。`dsh` 命令行不能操作桌面版的 `desktop` profile。
+
+**hook 桥接**：走官方的 Claude Code hook 桥接，只用于命令行 / web 版。先在要用的 profile 里装桥接包（版本与 `dsh --version` 一致）：
 
 ```bash
 dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepseek-ai/dsh-hook-protocol@<版本>
@@ -231,7 +241,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
         pluginRoot: /path/to/clawd-mood/plugin
 ```
 
-限制：桥接只支持 5 个事件，所以**不显示 waiting 和 error**，也没有压缩状态。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。桌面版的 profile 名是 `desktop`。
+限制：桥接只支持 5 个事件，所以**不显示 waiting 和 error**，也没有压缩状态；会话从第一条 prompt 才上屏。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。
 
 #### 同时挂
 
@@ -250,7 +260,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 | Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi）   |
 | Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中                                            |
 | Working  | 绿 / 键盘 | 调用工具 / 压缩完恢复                                                 |
-| Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 无）                             |
+| Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 桥接无）                             |
 | Done     | 白 / 对勾 | 回答完成（3 秒瞬态）                                                  |
 | Error    | 红 / 叉号，红框 | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi）                 |
 | Sleeping | 深灰 / Z | 5 分钟无事件（Working 为 15 分钟，Waiting 不睡）；30 分钟无事件的会话会从屏幕移除 |
@@ -264,6 +274,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 | OpenCode ≥ 2.0   | 进程内插件                | ✓       | ✓     | ✓    | ✓               |
 | pi               | 进程内扩展                | 仅扩展弹窗 | ✓  | ✓    | ✓               |
 | WorkBuddy        | 插件 hooks（同 Claude）   | ✓       | ✓     | ✓    | ✓               |
+| DeepSeek Harness | 原生插件                  | ✓       | ✓     | —    | ✓               |
 | DeepSeek Harness | 官方 Claude Code hook 桥接 | —      | —     | —    | —               |
 
 ### 4. 快速验证
@@ -333,7 +344,9 @@ pi remove /path/to/clawd-mood/plugin/adapters/pi/clawd-mood.ts
 codebuddy plugin uninstall clawd-mood@clawd-mood
 codebuddy plugin marketplace remove clawd-mood
 
-# DeepSeek Harness：从 cordis.patch.yml 删掉 clawd-mood-hooks 这段（别把文件删空，空 patch 会导致启动失败）
+# DeepSeek Harness 原生插件：桌面版在插件管理里移除；命令行 / web 版
+dsh plugin --profile web remove clawd-mood-dsh
+# DeepSeek Harness 桥接：从 cordis.patch.yml 删掉 clawd-mood-hooks 这段（别把文件删空，空 patch 会导致启动失败）
 ```
 
 停 daemon + 清理：
@@ -364,7 +377,7 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
 - **Codex 里屏幕完全没反应**：hook 还没被信任，在 codex 里运行 `/hooks` 审阅并信任
 - **OpenCode 屏幕没反应**：确认版本 ≥ 2.0、软链有效，运行 `opencode reload` 或重启后台服务让插件重新加载
-- **DeepSeek Harness 屏幕没反应**：daemon 不会被它拉起，先手动启动；再确认 profile 里装了桥接包、`configPath` 是绝对路径（路径错误时桥接只打警告，不注册 hook）
+- **DeepSeek Harness 屏幕没反应**：会话要提交过 prompt 才上屏。原生插件：确认装在了正在用的 profile（桌面版是 `desktop`）。桥接：daemon 不会被它拉起，先手动启动；再确认 profile 里装了桥接包、`configPath` 是绝对路径（路径错误时桥接只打警告，不注册 hook）
 
 ## 许可证
 

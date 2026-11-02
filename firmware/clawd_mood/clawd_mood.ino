@@ -24,6 +24,10 @@
 #define SESSION_EXPIRE_MS (30UL*60*1000)   // forget sessions that never sent SessionEnd
 
 #define MAX_SESSIONS   12
+#define MAX_FOLLOWERS  12                 // subagents remembered per session
+#define FOLLOWER_LEAVE_MS  1500UL         // celebrates this long after SubagentStop
+#define FOLLOWER_EXPIRE_MS (15UL*60*1000) // same patience as a long tool call
+#define FOLLOWER_DROP_MS   400UL          // falls into line when it appears
 #define PER_PAGE       4
 #define PAGE_ROTATE_MS 5000UL
 #define URGENT_HOLD_MS 10000UL
@@ -64,12 +68,23 @@ struct Skin {
   bool knotHat;
 };
 
+struct Follower {
+  char id[7];
+  Mood mood;
+  bool leaving;
+  unsigned long bornMs, moodSinceMs, lastEventMs;
+};
+
 struct Session {
   char id[9];
   char name[65];    // working directory, UTF-8
   char title[65];   // session title, kept once known
   char src[3];
-  Mood mood;
+  Mood mood;        // what the screen shows: own, or waiting for a follower
+  Mood own;         // the main agent's state
+  unsigned long ownSinceMs;
+  Follower followers[MAX_FOLLOWERS];
+  uint8_t followerCount;
   uint8_t color;
   unsigned long lastEventMs;
   bool quiet;                              // urgent state that shouldn't jump pages
@@ -167,9 +182,10 @@ int8_t addSession(const char* id, const char* name, const char* src) {
   strlcpy(s.name, name, sizeof(s.name));
   strlcpy(s.src, src, sizeof(s.src));
   s.title[0] = 0;
-  s.mood = MOOD_IDLE;
+  s.mood = s.own = MOOD_IDLE;
+  s.followerCount = 0;
   s.color = nextColor++ % 6;
-  s.moodSinceMs = millis();
+  s.moodSinceMs = s.ownSinceMs = millis();
   s.quiet = false;
   return sessionCount++;
 }
@@ -178,6 +194,71 @@ void setMood(Session& s, Mood m) {
   if (m == s.mood) return;
   s.mood = m;
   s.moodSinceMs = millis();
+}
+
+// A subagent waiting for approval must be as visible as the main agent waiting
+void syncMood(Session& s) {
+  Mood shown = s.own;
+  for (uint8_t i = 0; i < s.followerCount; i++) {
+    if (!s.followers[i].leaving && s.followers[i].mood == MOOD_WAITING) shown = MOOD_WAITING;
+  }
+  setMood(s, shown);
+}
+
+void setOwn(Session& s, Mood m) {
+  if (m != s.own) {
+    s.own = m;
+    s.ownSinceMs = millis();
+  }
+  syncMood(s);
+}
+
+void removeFollower(Session& s, uint8_t i) {
+  for (uint8_t j = i; j + 1 < s.followerCount; j++) s.followers[j] = s.followers[j + 1];
+  s.followerCount--;
+}
+
+int8_t findFollower(const Session& s, const char* id) {
+  for (uint8_t i = 0; i < s.followerCount; i++) {
+    if (!strncmp(s.followers[i].id, id, sizeof(s.followers[i].id) - 1)) return i;
+  }
+  return -1;
+}
+
+void handleFollower(Session& s, const char* id, Mood next, bool gone) {
+  unsigned long now = millis();
+  int8_t i = findFollower(s, id);
+  if (gone) {
+    if (i >= 0 && !s.followers[i].leaving) {
+      s.followers[i].leaving = true;
+      s.followers[i].mood = MOOD_DONE;
+      s.followers[i].moodSinceMs = now;
+    }
+    return;
+  }
+  if (i >= 0 && s.followers[i].leaving) return;  // hooks are async; ignore stragglers
+  if (i < 0) {
+    if (s.followerCount == MAX_FOLLOWERS) {
+      uint8_t oldest = 0;
+      for (uint8_t j = 1; j < s.followerCount; j++) {
+        if (s.followers[j].lastEventMs < s.followers[oldest].lastEventMs) oldest = j;
+      }
+      removeFollower(s, oldest);
+    }
+    i = s.followerCount++;
+    Follower& n = s.followers[i];
+    strlcpy(n.id, id, sizeof(n.id));
+    n.mood = MOOD_UNKNOWN;
+    n.leaving = false;
+    n.bornMs = now;
+  }
+  Follower& f = s.followers[i];
+  if (next != MOOD_THINKING && next != MOOD_WAITING) next = MOOD_WORKING;
+  if (f.mood != next) {
+    f.mood = next;
+    f.moodSinceMs = now;
+  }
+  f.lastEventMs = now;
 }
 
 void tickSessions() {
@@ -189,18 +270,26 @@ void tickSessions() {
       removeSession(i);
       continue;
     }
-    if (s.mood == MOOD_DONE && now - s.moodSinceMs > DONE_REVERT_MS) setMood(s, MOOD_IDLE);
-    // A pending approval stays visible until it is answered or the session expires
-    unsigned long sleepAfter = s.mood == MOOD_WORKING ? SLEEP_WORKING_MS : SLEEP_IDLE_MS;
-    if (s.mood != MOOD_WAITING && s.mood != MOOD_SLEEPING && quiet > sleepAfter) {
-      setMood(s, MOOD_SLEEPING);
+    for (int8_t j = s.followerCount - 1; j >= 0; j--) {
+      const Follower& f = s.followers[j];
+      if (f.leaving ? now - f.moodSinceMs > FOLLOWER_LEAVE_MS : now - f.lastEventMs > FOLLOWER_EXPIRE_MS) {
+        removeFollower(s, j);
+      }
     }
+    if (s.own == MOOD_DONE && now - s.ownSinceMs > DONE_REVERT_MS) s.own = MOOD_IDLE, s.ownSinceMs = now;
+    // A pending approval stays visible until it is answered or the session expires
+    unsigned long sleepAfter = s.own == MOOD_WORKING ? SLEEP_WORKING_MS : SLEEP_IDLE_MS;
+    if (s.own != MOOD_WAITING && s.own != MOOD_SLEEPING && quiet > sleepAfter) {
+      s.own = MOOD_SLEEPING;
+      s.ownSinceMs = now;
+    }
+    syncMood(s);
   }
 }
 
 void handleLine(const char* line) {
   if (!line[0]) return;
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;  // a line with a 16-character Chinese title needs ~290
   DeserializationError err = deserializeJson(doc, line);
   if (err) {
     Serial.print("[warn] bad json: "); Serial.println(line);
@@ -218,18 +307,30 @@ void handleLine(const char* line) {
     Serial.print("[warn] unknown state: "); Serial.println(st);
     return;
   }
+  const char* agent = doc["agent"];
+  bool gone = doc["gone"] | false;
   int8_t i = findSession(id);
+  if (i < 0 && gone) return;  // don't bring back an expired session just to say goodbye
   if (i < 0) i = addSession(id, doc["name"] | "clawd", doc["src"] | "");
   if (i < 0) return;
   Session& s = sessions[i];
   const char* name = doc["name"];
   const char* title = doc["title"];
-  if (name) strlcpy(s.name, name, sizeof(s.name));
-  if (title) strlcpy(s.title, title, sizeof(s.title));
+  // A subagent may work elsewhere (a worktree); the label belongs to the main agent
+  if (name && !agent) strlcpy(s.name, name, sizeof(s.name));
+  if (title && !agent) strlcpy(s.title, title, sizeof(s.title));
   Mood prev = s.mood;
-  setMood(s, next);
   s.lastEventMs = millis();
-  bool quiet = doc["quiet"] | false;
+  bool quiet = false;
+  if (agent) {
+    handleFollower(s, agent, next, gone);
+    if (s.own == MOOD_SLEEPING) setOwn(s, MOOD_IDLE);
+    syncMood(s);
+    next = s.mood;
+  } else {
+    setOwn(s, next);
+    quiet = doc["quiet"] | false;
+  }
   if (isUrgent(next) && !quiet && (!isUrgent(prev) || s.quiet)) {
     strlcpy(urgentId, s.id, sizeof(urgentId));
     urgentUntilMs = millis() + URGENT_HOLD_MS;
@@ -432,12 +533,14 @@ void drawEye(const Skin& k, int16_t ex, int16_t ey, uint8_t u, Mood m, unsigned 
 }
 
 // Creature grid is 12 wide x 9 tall; (x, feetY) is its bottom-left corner.
-void drawCreature(const Session& s, int16_t x, int16_t feetY, uint8_t u, unsigned long now) {
-  const Skin& k = skinFor(s.src);
-  uint16_t body = strcmp(k.src, s.src) ? bodyColors[s.color] : k.body;
-  unsigned long t = now - s.moodSinceMs;
+void drawCreature(const char* src, uint8_t color, Mood mood, unsigned long sinceMs, bool tinted,
+                  int16_t x, int16_t feetY, uint8_t u, unsigned long now) {
+  const Skin& k = skinFor(src);
+  uint16_t body = tinted ? C_WAITING : strcmp(k.src, src) ? bodyColors[color] : k.body;
+  unsigned long t = now - sinceMs;
+  uint8_t lift = max(u, (uint8_t)2);   // a 1px hop is invisible on a follower
 
-  if (s.mood == MOOD_SLEEPING) {     // squashed flat, eyes shut
+  if (mood == MOOD_SLEEPING) {     // squashed flat, eyes shut
     drawTorso(k, dimColor(body), dimColor(k.accent), dimColor(k.face), x, feetY - 4 * u, u, 2);
     if (k.knotHat) drawKnot(x + 6 * u - 5 * u / 2, feetY - 9 * u + u / 2, 5 * u, dimColor(body));
     uint16_t lid = dimColor(k.eye);
@@ -448,22 +551,22 @@ void drawCreature(const Session& s, int16_t x, int16_t feetY, uint8_t u, unsigne
   }
 
   int16_t dx = 0, dy = 0;
-  switch (s.mood) {
+  switch (mood) {
     case MOOD_IDLE: {
       const int8_t wander[] = {0, -1, 0, 1};
       dx = wander[(now / 800) % 4] * u / 2;
       break;
     }
     case MOOD_WORKING: dy = -((now / 150) % 2) * (u / 3 + 1); break;
-    case MOOD_WAITING: dy = -((now / 250) % 2) * u; break;
-    case MOOD_DONE:    dy = t < 1500 ? -((now / 150) % 2) * u : 0; break;
+    case MOOD_WAITING: dy = -((now / 250) % 2) * lift; break;
+    case MOOD_DONE:    dy = t < 1500 ? -((now / 150) % 2) * lift : 0; break;
     case MOOD_ERROR:   dx = (((now / 80) * 17) % 3 - 1) * (u / 3 + 1); break;
     default: break;
   }
   int16_t bx = x + dx, by = feetY - 9 * u + dy;
 
   // Jumps lift the legs off the ground; otherwise they stretch down to it
-  bool up = s.mood == MOOD_WAITING || s.mood == MOOD_DONE;
+  bool up = mood == MOOD_WAITING || mood == MOOD_DONE;
   int16_t legY = by + 7 * u;
   int16_t legH = up ? 2 * u : feetY - legY;
   canvas.fillRect(bx + k.legL * u, legY, k.legW * u, legH, body);
@@ -473,29 +576,54 @@ void drawCreature(const Session& s, int16_t x, int16_t feetY, uint8_t u, unsigne
 
   // Arms: typing alternates, waiting and done throw them up
   int16_t lArm = 3, rArm = 3;
-  if (s.mood == MOOD_WORKING) { bool f = (now / 150) % 2; lArm = f ? 2 : 4; rArm = f ? 4 : 2; }
+  if (mood == MOOD_WORKING) { bool f = (now / 150) % 2; lArm = f ? 2 : 4; rArm = f ? 4 : 2; }
   if (up) { lArm = 1; rArm = 1; }
   if (k.armL >= 0) canvas.fillRect(bx + k.armL * u, by + lArm * u, u, 2 * u, body);
   if (k.armR >= 0) canvas.fillRect(bx + k.armR * u, by + rArm * u, u, 2 * u, body);
 
   // Eyes: thinking looks around
   const int8_t look[] = {0, -1, 1, 0};
-  int16_t e = s.mood == MOOD_THINKING ? look[(now / 600) % 4] * u / 2 : 0;
+  int16_t e = mood == MOOD_THINKING ? look[(now / 600) % 4] * max(u / 2, 1) : 0;
   int16_t ly = by + k.eyeY * u, lx = bx + k.eyeL * u + e;
-  drawEye(k, lx, ly, u, s.mood, now);
-  if (k.eyeR >= 0) drawEye(k, bx + k.eyeR * u + e, ly, u, s.mood, now);
+  drawEye(k, lx, ly, u, mood, now);
+  if (k.eyeR >= 0) drawEye(k, bx + k.eyeR * u + e, ly, u, mood, now);
 
-  if (s.mood == MOOD_DONE && t < 1500) {   // confetti
+  if (mood == MOOD_DONE && t < 1500) {   // confetti
     for (uint8_t i = 0; i < 6; i++) {
       int16_t cx = x + (i * 37 + now / 40) % (12 * u);
       int16_t cy = by + ((i * 53 + now / 15) % (4 * u));
       canvas.fillRect(cx, cy, u / 2 + 1, u / 2 + 1, bodyColors[i % 6]);
     }
   }
-  if (s.mood == MOOD_ERROR) {              // smoke
+  if (mood == MOOD_ERROR) {              // smoke
     int16_t sy = by - ((now / 120) % 3) * u / 2;
     canvas.fillRect(bx + 10 * u, sy, u, u, C_SLEEPING);
     canvas.fillRect(bx + 11 * u, sy - u, u / 2 + 1, u / 2 + 1, C_SLEEPING);
+  }
+}
+
+// Subagents line up above the main creature, oldest first. Each animates a beat
+// behind the one before it so the row ripples instead of moving in lockstep.
+void drawFollowers(const Session& s, int16_t x, int16_t w, int16_t feetY, uint8_t fu, unsigned long now) {
+  uint8_t n = s.followerCount;
+  if (!n) return;
+  const int16_t pitch = 12 * fu + 1, room = w - 6, badgeW = 14;
+  uint8_t shown = n * pitch <= room ? n : (room - badgeW) / pitch;
+  uint8_t extra = n - shown;
+  int16_t left = x + (w - shown * pitch - (extra ? badgeW : 0)) / 2 + 1;
+  for (uint8_t i = 0; i < shown; i++) {
+    const Follower& f = s.followers[i];
+    unsigned long age = now - f.bornMs;
+    int16_t drop = age < FOLLOWER_DROP_MS ? (FOLLOWER_DROP_MS - age) / 40 : 0;
+    drawCreature(s.src, s.color, f.mood, f.moodSinceMs, f.mood == MOOD_WAITING,
+                 left + i * pitch, feetY - drop, fu, now + i * 110);
+  }
+  if (extra) {
+    canvas.setTextSize(1);
+    canvas.setTextColor(C_INK);
+    canvas.setCursor(left + shown * pitch + 1, feetY - 8);
+    canvas.print('+');
+    canvas.print(extra);
   }
 }
 
@@ -528,7 +656,8 @@ void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsi
   canvas.fillRect(x + 4, tileY, w - 8, tileH, stateColor(s.mood));
   canvas.drawRect(x + 4, tileY, w - 8, tileH, C_INK);
 
-  drawCreature(s, x + (w - 12 * u) / 2, tileY, u, now);
+  drawCreature(s.src, s.color, s.mood, s.moodSinceMs, false, x + (w - 12 * u) / 2, tileY, u, now);
+  drawFollowers(s, x, w, tileY - 9 * u - (u / 3 + 4), u >= 11 ? 2 : 1, now);
 
   const uint8_t* icon = iconFor(s.mood, now);
   if (icon) {

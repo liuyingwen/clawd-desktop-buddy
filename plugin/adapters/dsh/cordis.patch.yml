@@ -1,0 +1,4 @@
+# Mount clawd-mood in the host-side DSH runtime.
+- insert:
+    - id: clawd-mood
+      name: clawd-mood-dsh

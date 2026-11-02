@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const HOOK_PY = join(dirname(realpathSync(fileURLToPath(import.meta.url))), "..", "..", "scripts", "hook.py");
 const PORTFILE = join(tmpdir(), "clawd-mood.port");
-// One creature per process: child sessions stay folded into their parent.
+// One creature per process; child sessions show as followers above it.
 const IDENTITY = { session: `oc${process.pid}`.slice(0, 8), name: basename(process.cwd()).slice(0, 16), src: "OC" };
 
 function send(state, event, extra = {}) {
@@ -45,43 +45,69 @@ const END_STATES = {
   "session.execution.interrupted": "idle",
 };
 
+// Child session events -> follower state; done also removes the follower
+const CHILD_STATES = {
+  "session.execution.started": "thinking",
+  "session.execution.succeeded": "done",
+  "session.execution.failed": "done",
+  "session.execution.interrupted": "done",
+  "session.deleted": "done",
+  "session.tool.called": "working",
+  "session.tool.success": "working",
+  "session.tool.failed": "working",
+  "permission.asked": "waiting",
+  "permission.replied": "working",
+  "form.created": "waiting",
+  "form.replied": "working",
+  "form.cancelled": "working",
+  "session.compaction.started": "thinking",
+  "session.compaction.ended": "working",
+  "session.compaction.failed": "working",
+};
+
+function sendChild(session, type) {
+  const state = CHILD_STATES[type];
+  if (state) send(state, type, { agent: session.slice(-6), ...(state === "done" ? { gone: true } : {}) });
+}
+
 export default {
   id: "clawd-mood",
   async setup(ctx) {
-    // Subagents are child sessions in-process; their end must not read as done.
+    // Subagents are child sessions in-process; they must not drive the main creature.
     const children = new Set();
     const running = new Set();
 
     const onEvent = ({ type, data }) => {
       const session = data?.sessionID;
+      if (children.has(session)) {
+        sendChild(session, type);
+        if (type === "session.deleted") children.delete(session);
+        return;
+      }
       switch (type) {
         case "session.created":
-          if (data.parentID) children.add(session);
-          break;
-        case "session.deleted":
-          children.delete(session);
+          if (data.parentID) {
+            children.add(session);
+            sendChild(session, "session.execution.started");
+          }
           break;
         case "session.execution.started":
-          if (children.has(session)) break;
           running.add(session);
           send("thinking", type);
           break;
         case "session.execution.succeeded":
         case "session.execution.failed":
         case "session.execution.interrupted":
-          if (children.has(session)) break;
           running.delete(session);
           send(END_STATES[type], type);
           break;
         case "session.tool.called":
         case "session.tool.success":
+        case "session.tool.failed": // e.g. `diff` exiting 1; the agent carries on
         case "permission.replied":
         case "form.replied":
         case "form.cancelled":
           send("working", type);
-          break;
-        case "session.tool.failed":
-          send("error", type, { quiet: true }); // the agent carries on; don't jump pages
           break;
         case "permission.asked":
         case "form.created":

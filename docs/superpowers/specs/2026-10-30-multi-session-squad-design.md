@@ -20,7 +20,7 @@
 
 - 每页最多 4 个并撑满：1 全屏；2 左右拆分；3 左大右二；4 为 2×2。
 - 超过 4 个时每 5 秒自动翻页（硬件无按键），底部 4 像素页码条。滑动 6 帧、共 300ms。
-- 别的页有会话进入 waiting / error：立即翻过去，停留到解除或最多 10 秒，页码块闪状态色。单次工具失败带 `quiet`，只显示不翻页。
+- 别的页有会话进入 waiting / error：立即翻过去，停留到解除或最多 10 秒，页码块闪状态色。带 `quiet` 的消息只显示不翻页（目前上游不发送）；单次工具失败显示为 working，不算 error。
 - 位置稳定：新会话追加，状态变化不换位。
 
 ## 取舍
@@ -32,3 +32,28 @@
 - **30 分钟过期**：CLI 崩溃不会发 SessionEnd。
 - **标签优先显示会话标题**：读 CLI 内部数据，读不到时退回目录名；固件保留最近的标题，避免偶发读取失败造成跳变。
 - **中文字体**：wqy 12 像素 GB2312，约占 208 KB 闪存；分屏单元格一行约放 9 个汉字。
+
+## 子代理：头顶小跟班
+
+子代理不占格子，也不改主小人状态（等待批准除外）。hook 用 `agent_id` 识别，串口消息多带 `agent` 字段，`SubagentStop` 再带 `gone`。
+
+- 位置：主小人头顶一排居中，按出现先后排列，放不下显示 `+N`。选它而不是两侧或脚边：不用缩小主小人，不挡身体，各种布局表现一致。
+- 造型：主小人的缩小版，12×9px，单会话全屏时翻倍。
+
+| 时机 | 动效 |
+|---|---|
+| 出现（`SubagentStart`，thinking） | 从上方落下 400ms，眼睛左右看 |
+| 工作（working） | 跳动、交替敲键盘，每只错开 110ms 形成波浪 |
+| 等待批准（waiting） | 全身变黄、举手高跳；主小人同时显示 waiting 并翻页 |
+| 结束（`SubagentStop`） | `^` 眼跳跃撒彩屑 1.5 秒后消失，后面的依次补位 |
+
+没收到 `SubagentStop` 时，15 分钟无事件后移除。工具失败仍显示 working。
+
+各 agent 的子代理来源：
+
+| agent | 识别方式 | 结束信号 |
+|---|---|---|
+| Claude Code / WorkBuddy / Codex | hook 的 `agent_id` + `agent_type`，`session_id` 是父会话 | `SubagentStop` |
+| OpenCode | `session.created` 带 `parentID` 的子会话 | `session.execution.*` 结束或 `session.deleted` |
+| pi | 环境变量 `CLAWD_MOOD_PI_OWNER` 不是自己的子进程 | `agent_settled` / `session_shutdown` |
+| DeepSeek Harness | `header.origin === "subagent"`，嵌套的归到顶层 | `turn-stopping` / `agent/error` / `agent/disposed` |
