@@ -649,7 +649,7 @@ async function boot() {
   setBrightness(DEFAULTS.brightness);
   syncPlayback();
   // Without the manifest there are no cartridges, but the status poll and the other settings still work
-  if (!state.themes.length) setStatus("预览清单读不到，请重新运行 tools/preview/render.py", "", "bad", true);
+  if (!state.themes.length) setStatus("预览清单读不到，page/previews/ 缺失或损坏，请重新拉取仓库", "", "bad", true);
   if (!state.token) {
     showClosed(NO_TOKEN);
     return;

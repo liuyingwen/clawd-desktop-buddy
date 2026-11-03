@@ -1,6 +1,13 @@
 # Claude Code
 .claude/
 
+# Development material, kept locally only
+/CLAUDE.md
+/AGENTS.md
+/docs/
+/sim/
+/tools/preview/
+
 # Arduino IDE build output
 build/
 *.elf

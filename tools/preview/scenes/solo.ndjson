@@ -1,5 +1,0 @@
-{"preview":{"settle_ms":1000,"loop_ms":6000}}
-{"t":100,"send":{"state":"working","session":"s0","name":"clawd-mood","title":"等你批准","src":"CC"}}
-{"t":100,"send":{"state":"working","session":"s0","agent":"a00001","src":"CC","event":"PreToolUse"}}
-{"t":100,"send":{"state":"waiting","session":"s0","agent":"a00002","src":"CC","event":"PermissionRequest"}}
-{"t":1300,"end":true}

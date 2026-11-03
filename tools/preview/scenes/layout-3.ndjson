@@ -1,4 +1,0 @@
-{"t":100,"send":{"state":"thinking","session":"s0","name":"配置页","src":"CC"}}
-{"t":100,"send":{"state":"done","session":"s1","name":"clawd-mood","src":"CX"}}
-{"t":100,"send":{"state":"error","session":"s2","name":"一个很长很长很长的中文标题超出单元格","src":"OC"}}
-{"t":6600,"end":true}
