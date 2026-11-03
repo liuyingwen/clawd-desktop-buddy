@@ -44,7 +44,7 @@ tools/preview/render.py ── 主机编译真实固件 ──→ page/previews/
 - 荧光终端开机日志里的版本号（固件不知道插件版本）和雷达脉冲；街机单会话的终端日志。
 - 剧场 done 的鞠躬：`drawCreature` 的动作是共用的，改成跳起、对勾、金星和彩屑。剧场的等待色比稿子的 `#FFB020` 更亮，和金色边框分得开。
 
-`Theme` 带调色板（按角色分，不借用状态色）、6 个 agent 的造型、Codex 帽子、图标集，以及可选绘制钩子 `cellBg` / `tile` / `idleScreen` / `overlay`，空钩子走内置绘制；管布局的字段和钩子见下。主题 1、2 的 `perPage` 是 4、`pageMs` 是 0、布局钩子全空，画面和以前一样。
+`Theme` 带调色板（按角色分，不借用状态色）、7 个 agent 的造型（`SKIN_COUNT`）、Codex 帽子、图标集，以及可选绘制钩子 `cellBg` / `tile` / `idleScreen` / `overlay`，空钩子走内置绘制；管布局的字段和钩子见下。主题 1、2 的 `perPage` 是 4、`pageMs` 是 0、布局钩子全空，画面和以前一样。
 
 **不分格的布局**（主题 3–5 要用）：
 

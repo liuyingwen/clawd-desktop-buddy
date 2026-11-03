@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概要
 
-`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI / OpenCode / pi / WorkBuddy / DeepSeek Harness** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示会话标题或目录名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。外观是编译进固件的主题（经典 / 午夜 / 荧光终端 / 街机 / 剧场，后三个不分格子），方向和亮度也可调，都通过本地配置页 `page/serve.py` 设置，见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
+`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI / OpenCode / pi / WorkBuddy / DeepSeek Harness / Cursor** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示会话标题或目录名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。外观是编译进固件的主题（经典 / 午夜 / 荧光终端 / 街机 / 剧场，后三个不分格子），方向和亮度也可调，都通过本地配置页 `page/serve.py` 设置，见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
 
 **跨平台桌面摆件（macOS / Linux / Windows）**。明确不做：WiFi 控制、OTA、launchd/systemd 系统级自启、自动化单元测试、蜂鸣器、多设备。Windows 端代码完成但 **untested on Windows** —— 欢迎社区验证（见 README）。Linux 同样未在 CI 验证，但 POSIX 路径与 macOS 共用，回归风险低。
 
@@ -100,13 +100,13 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 - 多于一页时自动翻页（硬件没有按键），每页停 `Theme.pageMs`，0 是 5 秒（`PAGE_ROTATE_MS`，剧场用 5095）。主题 1、2 向左滑，底部 4 像素页码条（`PAGER_H`）；其他主题用 `transition` / `pagerHeight` / `pager` 换掉
 - 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒（`URGENT_HOLD_MS`）；内置页码条上该页的页码块闪状态色。带 `quiet` 的消息例外。跳页和停留都在 sketch 里，主题只读 `heldUrgent()` / `isAlerting()`（街机只有一页，用它们决定焦点）
 - 会话位置稳定，新会话追加到末尾，状态变化不换位；有会话退出时后面的依次前移
-- 不同工具是不同角色，按 `src` 查当前主题的 `SKINS` 表（每个主题各有一份，6 个 agent 顺序相同），造型来自各自 logo。主题 1 的值：CC 橙色 Clawd、CX 戴 OpenAI 结帽子的白色小人（现图标，不是旧的云朵）、OC 黑色空心框、PI 像素 P（独眼）、DS 蓝鲸、WB 青绿猫；主题 2 的 CX / OC / PI 改成亮色，否则融进深色背景。同一工具的多个会话长得一样，靠标签区分；未知 `src` 用 Clawd 造型 + 轮换颜色
+- 不同工具是不同角色，按 `src` 查当前主题的 `SKINS` 表（每个主题各有一份，7 个 agent 顺序相同，`SKIN_COUNT`），造型来自各自 logo。主题 1 的值：CC 橙色 Clawd、CX 戴 OpenAI 结帽子的白色小人（现图标，不是旧的云朵）、OC 黑色空心框、PI 像素 P（独眼）、DS 蓝鲸、WB 青绿猫、CU 灰色等距立方体（顶面最亮）；主题 2 的 CX / OC / PI 改成亮色，否则融进深色背景。同一工具的多个会话长得一样，靠标签区分；未知 `src` 用 Clawd 造型 + 轮换颜色
 - 状态靠形状 + 颜色区分（主题 1、2 是地砖色 + 右上角图标，主题 3–5 各有画法，见设计说明书）。主题 1 的值：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z；主题 2 见 `theme_noir.cpp`
 - 改颜色要改具体主题，不要在 sketch 里写死：`theme.h` 的 `Palette` 按角色分字段，不借用状态色。主题 1 的画面被 `tools/preview/baseline.txt` 锁住
 - 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按可用的像素宽度在 UTF-8 边界截断（`fitLabel()`）
 - 标题来源是 CLI 内部数据，可能随版本失效，读不到时静默退回目录名：Claude Code 读 `transcript_path` 里的 `ai-title` 记录，Codex 读 `~/.codex/session_index.jsonl` 的 `thread_name`
 - 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）
-- 子代理是主小人的小跟班，放不下显示 `+N`。主题 1、2 是头顶一排（同款造型 12×9px，单会话全屏时翻倍）；荧光终端在标题下一行，街机是头顶的僚机，剧场是侧幕的替角。计时和移除规则在 sketch 里，所有主题一样；这里列的动效是主题 1、2 用的内置 `drawFollowers()`，主题 3–5 自己画跟班，各有一套。动效：出现时落下、启动时看左右、工作时错拍跳动敲键盘、等待时变黄高跳（主小人同时显示 waiting 并翻页）、`SubagentStop` 后撒彩屑 1.5 秒再消失；收不到结束事件时，工具执行中 15 分钟（`FOLLOWER_EXPIRE_MS`）、工具之间（最后一条是 `PostToolUse` / `PostToolUseFailure`）2 分钟（`FOLLOWER_PAUSE_MS`）后移除，模型想得更久的会在下个工具事件时重新出现。所有 agent 都支持，同一只主小人跟自己工具的同款跟班。标签只由主代理更新
+- 子代理是主小人的小跟班，放不下显示 `+N`。主题 1、2 是头顶一排（同款造型 12×9px，单会话全屏时翻倍）；荧光终端在标题下一行，街机是头顶的僚机，剧场是侧幕的替角。计时和移除规则在 sketch 里，所有主题一样；这里列的动效是主题 1、2 用的内置 `drawFollowers()`，主题 3–5 自己画跟班，各有一套。动效：出现时落下、启动时看左右、工作时错拍跳动敲键盘、等待时变黄高跳（主小人同时显示 waiting 并翻页）、`SubagentStop` 后撒彩屑 1.5 秒再消失；收不到结束事件时，工具执行中 15 分钟（`FOLLOWER_EXPIRE_MS`）、工具之间（最后一条是 `PostToolUse` / `PostToolUseFailure`）2 分钟（`FOLLOWER_PAUSE_MS`）后移除，模型想得更久的会在下个工具事件时重新出现。除 Cursor 外的 agent 都支持，同一只主小人跟自己工具的同款跟班。标签只由主代理更新
 - 用 `GFXcanvas16` 整屏帧缓冲（115 KB）一次刷新，不要回到 `fillScreen` 直接画屏，会闪
 
 hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` 都映射到 `working`，避免表情在工具调用过程中乱跳。**子代理不驱动主小人**：带 `agent_id` 的事件只更新头顶的小跟班；`SubagentStop` 常在主代理 `Stop` 之后才到（实测 13 次里 10 次），所以它只能移除跟班，不能改主状态，否则会盖掉 `done` 并卡到睡眠。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
@@ -124,6 +124,7 @@ hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToo
 
 - Claude Code：`PostToolUseFailure` → `working`（`diff` 退出码 1 这类很常见，agent 还在继续，不算错误；其他 agent 的工具失败同样处理）、`StopFailure` → `error`（API 报错结束回合）、`Notification` → `waiting`（只认 `notification_type` 为 `permission_prompt` / `elicitation_dialog` 或缺失的情况，`idle_prompt` 这类不是待处理事项）
 - Codex：`Interrupt` → `idle`（用户中断回合）
+- Cursor：事件名是驼峰（条目传 `cursor`，`hook.py` 先换成上面的名字）。`sessionStart` / `beforeSubmitPrompt` / `preToolUse` / `postToolUse` / `postToolUseFailure` / `preCompact` / `sessionEnd` 一一对应；`stop` 按 `status` 拆成 `Stop`（completed）/ `Interrupt`（aborted）/ `StopFailure`（error）；`postToolUseFailure` 带 `is_interrupt` 时丢弃（随后的 `stop` 会报 aborted）。Cursor 没有审批事件和压缩结束事件，所以**没有 waiting**，压缩后靠下一个工具事件回到 working。不挂 `subagentStart` / `subagentStop`：`subagentStop` 不带子代理 ID，对不上是哪个跟班
 
 state 枚举（小写、严格匹配）：`idle | thinking | working | waiting | done | error | sleeping`。固件里 `parseMood` 用 `strcmp`，**大小写敏感**。
 
@@ -144,15 +145,19 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 
 - **WorkBuddy / CodeBuddy Code**：复用 `hooks/hooks.json`（引擎同时注入 `CLAUDE_PLUGIN_ROOT` 和 `CODEBUDDY_PLUGIN_ROOT`），只多一份 `plugin/.codebuddy-plugin/plugin.json` 和根目录 `.codebuddy-plugin/marketplace.json`
 - **DeepSeek Harness**：两条路线，二选一。原生插件 `plugin/adapters/dsh/`（推荐，桌面版唯一可用：`dsh` 命令行拒绝操作 `desktop` profile，只能在桌面版插件管理里装 `npm run pack:tarball` 打出的 tgz），订阅 Cordis 事件直接走 TCP，按 `session.header.id` 取 8 位 sha1 分会话，`origin: subagent` 显示为小跟班（嵌套的归到顶层会话；子代理审批策略固定为 never，不会 waiting），不监听 `agent/created`（它也为启动时恢复的历史会话触发）。备选是官方 `dsh-hooks-claude-code` 桥接读 `hooks/hooks-dsh.json`，仅 5 个事件，只用于命令行 / web 版。占位符只认 `${CLAUDE_PLUGIN_ROOT}`（带花括号），且它不在环境变量里，所以不能共用 `hooks.json`。沙箱内 `uv` 跑不了，这里用 `python3`（因此 `hook.py` 要兼容 macOS 自带的 3.9）
+- **Cursor**：不做成 Cursor 插件，而是由 `tools/cursor_hooks.py` 往用户级 `~/.cursor/hooks.json` 合并 8 个条目，指向仓库里 `hook.py` 的绝对路径（live）。原因：`cursor-agent` 2026.10.14 只在用户级或项目级 hooks 配了 `beforeSubmitPrompt` / `stop` / `afterAgentResponse` 时才执行这三个事件（插件里的同名 hook 也跟着这个条件），只装插件就没有 thinking 和 done。会话 ID 用 `conversation_id`，标签用 `workspace_roots[0]`：用户级 hook 的工作目录是 `~/.cursor/`，`cwd` 只有工具事件才带。不读标题（Cursor 的标题在它自己的数据库里）。设计见 `docs/superpowers/specs/2026-11-02-cursor-support-design.md`
 - **OpenCode ≥ 2.0 / pi**：`plugin/adapters/` 下的进程内适配器，事件直接映射成 state 走 TCP，`hook.py` 只用来拉起 daemon（`source: compact`，不推状态）。**不要改成每个事件起一个 uv**：`opencode run` 在回合结束约 8ms 后就退出，最后的 done 会丢
 
 **容易踩坑**：
-- `hooks.json` / `hooks-codex.json` / `hooks-dsh.json` 的命令结尾必须带 `|| true`。`uv` 自身出错退出码是 2，而同步 hook 的 2 表示拦截，会把用户的 prompt 全部挡掉
+- `hooks.json` / `hooks-codex.json` / `hooks-dsh.json` 和 Cursor 条目的命令结尾必须带 `|| true`。`uv` 自身出错退出码是 2，而同步 hook 的 2 表示拦截，会把用户的 prompt 全部挡掉
 - OpenCode 1.x 的 `event` / `tool.execute.*` 接口在 2.0 不运行；2.0 的事件名是 `session.execution.*`、`session.tool.*`，且 payload 在 `data` 上
 - pi 的 `agent_end` 不代表结束（可能重试、压缩），完成信号是 `agent_settled`；pi 的 subagent 是子进程，靠 `CLAWD_MOOD_PI_OWNER` 环境变量让顶层进程驱动主小人，子进程只发小跟班消息
 - Claude Code 的 Workflow 子代理有工具事件，但不发 `SubagentStart` / `SubagentStop`（实测 61 个全无）。`hook.py` 每次运行时读 `<transcript 去后缀>/subagents/workflows/*/journal.jsonl` 的 `result` 记录，给新结束的 agent 补发 `gone`（读到的位置记在 `<tempdir>/clawd-mood-journal-<session>.json`，`SessionEnd` 时删除）。这是 CLI 内部文件，读不到时静默退回固件的超时
 - 各家子代理的 `session_id`：Claude Code / WorkBuddy / Codex 都是父会话的（Codex 的 `agent_id` 是子线程 ID）。WorkBuddy 的 `agent_id` 来自 session 的 `storeId`，实测主会话带 `agent_type: cli` 但没有 `agent_id`，`SubagentStart` 有 `agent_id` 但没有 `agent_type`，所以 `hook.py` 对工具事件要求两者都有，对 `Subagent*` 只要 `agent_id`
 - `codex exec` 回合结束后立刻退出，异步的 `Stop` / 紧贴结尾的 `SubagentStop` 会丢（实测），靠同步的 `SessionEnd` 兜底移除会话，所以验证 Codex 结束信号时要让主代理在子代理结束后再多跑几秒
+- Cursor 的 hook 全是同步的（没有 `async`），每个工具调用都要等 `uv run hook.py`（约 50ms）。`preToolUse` 是权限 hook：stdout 为空才放行，写了不合法的 JSON 会被拦截，所以 **`hook.py` 不能往 stdout 打任何东西**
+- Cursor 默认会导入已装的 Claude Code 插件（设置里的 Third-Party Imports），把 `hooks.json` 转成自己的格式同步执行（丢掉 `async`）。`hook.py` 见到 payload 里有 `cursor_version` 却没带 `cursor` 参数时直接退出，避免同一会话报两次
+- `cursor-agent -p`（非交互）不管怎么配都不执行 `beforeSubmitPrompt` / `stop`，只有 sessionStart / 工具事件 / sessionEnd，这是 CLI 的行为，不用修
 - CodeBuddy 的 `--plugin-dir` 下事件会触发两次（marketplace 安装不会），状态相同，无害
 
 ## 串口协议
@@ -160,7 +165,7 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - 方向：**单向** Mac → ESP32，ESP32 不回包
 - 格式：NDJSON（换行分隔），UTF-8，115200 baud
 - 必需字段：`state`（设置行例外，见下）
-- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS` / `WB`，WorkBuddy 与 Claude Code 共用 hooks.json，靠 `CODEBUDDY_PLUGIN_ROOT` 环境变量区分）、`end`（`SessionEnd` 时为 `true`，移除该会话）
+- 会话字段：`session`（hook 对 session_id 取 8 位 hash，缺失时用 cwd）、`name`（cwd 目录名，最多 16 字符）、`title`（可选，会话标题，最多 16 字符）、`src`（`CC` / `CX` / `OC` / `PI` / `DS` / `WB` / `CU`，WorkBuddy 与 Claude Code 共用 hooks.json，靠 `CODEBUDDY_PLUGIN_ROOT` 环境变量区分）、`end`（`SessionEnd` 时为 `true`，移除该会话）
 - 不带 `session` 的旧格式消息归入 `default` 会话，手动测试仍可用
 - 子代理字段：`agent`（`agent_id` 后 6 位，有它时只更新小跟班，不改主状态）、`gone`（`SubagentStop` 时为 `true`）
 - 可选字段：`quiet`（`true` 时 waiting / error 只显示不翻页；固件保留支持，目前上游不发送）
@@ -252,6 +257,14 @@ codex plugin add clawd-mood@clawd-mood
 
 Claude Code 走 `--plugin-dir` 是 live path，无此问题。
 
+**Cursor**（桌面版和 `cursor-agent` 共用）：
+
+```bash
+uv run tools/cursor_hooks.py install      # 卸载：uninstall；测试时加 --file 指到临时文件，别动真实配置
+```
+
+条目是绝对路径，改 `hook.py` 立即生效，不用重装。在 Customize 的 Hooks 页或 Hooks 输出频道确认 8 个事件（sessionStart / beforeSubmitPrompt / preToolUse / postToolUse / postToolUseFailure / preCompact / stop / sessionEnd）。用 `cursor-agent` 验证时，交互模式才有 thinking / done；可以把条目装进临时工作区的 `.cursor/hooks.json`（项目级，和用户级同一个触发条件），再用 `--workspace` 和 `--trust` 指过去，并把 `TMPDIR` 指到临时目录、在里面放一个假 portfile，免得发到真设备。
+
 **WorkBuddy 改 plugin 后要清缓存再重装**：它同样拷贝到 `~/.workbuddy/plugins/cache/clawd-mood/clawd-mood/<version>/`，而且 `plugin uninstall` 不删这个目录，版本号没变时重装会继续用旧文件。改完先 uninstall，删掉该目录（或升版本号），再 install。
 
 ### 配置页
@@ -327,6 +340,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `plugin/adapters/dsh/` —— DeepSeek Harness 原生插件包（`index.js` + `cordis.patch.yml`），`prepack` 把 hook.py / daemon.py 拷进包里，tgz 脱离仓库也能拉起 daemon
 - `plugin/hooks/hooks-dsh.json` —— DeepSeek Harness 桥接用，5 个事件，`python3` 启动，传 `dsh` 参数标记来源
 - `plugin/.codebuddy-plugin/plugin.json`、`.codebuddy-plugin/marketplace.json` —— WorkBuddy / CodeBuddy Code 清单
+- `tools/cursor_hooks.py` —— 往 `~/.cursor/hooks.json` 合并 / 删除 Cursor 的 8 个条目（同步执行，传 `cursor` 参数标记来源），只认带 `scripts/hook.py ... cursor` 的条目，别的工具的条目不动。配置页的「插件痕迹」也按这个找
 - `plugin/scripts/hook.py` —— event → state 映射，TCP 短连接写 daemon（PEP 723，标准库 only，共享给两端）
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现；拔插恢复；读配置文件的 `serial_port`。要兼容 Python 3.9
 - `.agents/plugins/marketplace.json` —— Codex 本地 marketplace 入口
@@ -336,6 +350,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `docs/superpowers/specs/2026-06-08-windows-linux-support-design.md` —— Windows + Linux 跨平台设计说明书
 - `docs/superpowers/specs/2026-10-30-multi-session-squad-design.md` —— 多会话桌面小队设计说明书
 - `docs/superpowers/specs/2026-11-02-config-page-themes-design.md` —— 配置页与主题设计说明书（含加主题步骤、硬件未验证清单）
+- `docs/superpowers/specs/2026-11-02-cursor-support-design.md` —— Cursor 支持设计说明书
 - `docs/superpowers/plans/2026-06-07-clawd-mood-implementation.md` —— 原始 18 任务实施计划
 - `docs/superpowers/plans/2026-06-07-codex-support-implementation.md` —— Codex 支持 8 任务实施计划
 - `docs/superpowers/plans/2026-06-08-windows-linux-support-implementation.md` —— 跨平台实施计划

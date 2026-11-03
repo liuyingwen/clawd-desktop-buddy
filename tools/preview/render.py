@@ -540,7 +540,7 @@ def report_contrast(themes):
 
 MATRIX_STATES = [("idle", 600), ("thinking", 600), ("working", 600), ("waiting", 400), ("waiting", 600),
                  ("done", 600), ("error", 600), ("sleeping", 600)]   # waiting twice: flash off and on
-MATRIX_SOURCES = ["CC", "CX", "OC", "PI", "DS", "WB", "ZZ"]
+MATRIX_SOURCES = ["CC", "CX", "OC", "PI", "DS", "WB", "CU", "ZZ"]
 
 
 def matrix_frames(harness, theme, workdir):

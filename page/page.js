@@ -309,7 +309,7 @@ function setLed(id, tone, label) {
   led.setAttribute("aria-label", led.querySelector("span").textContent + "：" + label);
 }
 
-const PLUGIN_NAMES = { claude_code: "Claude Code", codex: "Codex", workbuddy: "WorkBuddy" };
+const PLUGIN_NAMES = { claude_code: "Claude Code", codex: "Codex", workbuddy: "WorkBuddy", cursor: "Cursor" };
 const PLUGIN_STATES = { found: "已找到", absent: "未安装", unknown: "未知" };
 
 function paintLeds(s) {

@@ -77,6 +77,14 @@ static const Skin SKINS[] = {
           ".BFFFFFFFFB.",
           ".BBBBBBBBBB."},
    RGB(20, 225, 185), RGB(150, 255, 230), RGB(4, 50, 44), RGB(150, 255, 230), 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
+  {"CU", {"....AAAA....",      // isometric cube: paper top, slate and indigo sides
+          "..AAAAAAAA..",
+          ".BAAAAAAAAF.",
+          ".BBBAAAAFFF.",
+          ".BBBBBFFFFF.",
+          ".BBBBBFFFFF.",
+          "...BBBFFF..."},
+   SLATE, PAPER, RGB(96, 98, 150), INK, 0, 11, 3, 7, 2, 3, 7, 4, EYES_SQUARE},
 };
 static_assert(sizeof(SKINS) / sizeof(SKINS[0]) == SKIN_COUNT, "every theme carries all agents");
 

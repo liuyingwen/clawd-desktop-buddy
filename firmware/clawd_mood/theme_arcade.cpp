@@ -80,6 +80,14 @@ static const Skin SKINS[] = {
           ".BFFFFFFFFB.",
           ".BBBBBBBBBB."},
    TEAL, TEAL, TEAL, INDIGO, 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
+  {"CU", {"....AAAA....",      // isometric cube: white top, silver and grey sides
+          "..AAAAAAAA..",
+          ".BAAAAAAAAF.",
+          ".BBBAAAAFFF.",
+          ".BBBBBFFFFF.",
+          ".BBBBBFFFFF.",
+          "...BBBFFF..."},
+   SILVER, WHITE, GREY, INDIGO, 0, 11, 3, 7, 2, 3, 7, 4, EYES_SQUARE},
 };
 static_assert(sizeof(SKINS) / sizeof(SKINS[0]) == SKIN_COUNT, "every theme carries all agents");
 
@@ -564,7 +572,7 @@ static void attract(unsigned long now) {
   textAt("INVADERS", 50, 60, 3, CYAN);
   const uint8_t u = 3;
   const int16_t spacing = 48, feet = 146;
-  int16_t shift = (now / 200) % 48 * 6;   // 6 px a step, 288 px in 9.6 s
+  int16_t shift = (now / 200) % 48 * SKIN_COUNT;   // SKIN_COUNT px a step: the whole cast, one spacing each, in 9.6 s
   uint8_t legs = (now / 200) % 2;
   for (uint8_t i = 0; i < SKIN_COUNT; i++) {
     const Skin& k = T->skins[i];

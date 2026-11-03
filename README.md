@@ -1,6 +1,6 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** 的运行状态。每个会话是一只像素小生物（每个工具一个由 logo 拟人的角色），同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** / **Cursor** 的运行状态。每个会话是一只像素小生物（每个工具一个由 logo 拟人的角色），同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
 以 [Apache License 2.0](LICENSE) 开源。
 
@@ -243,9 +243,29 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 限制：桥接只支持 5 个事件，所以**不显示 waiting 和 error**，也没有压缩状态；会话从第一条 prompt 才上屏。hook 跑在 dsh 沙箱里，`uv` 无法运行，因此改用系统 `python3`，且**无法自动拉起 daemon**——请手动启动，或先让其他 agent 拉起。
 
+#### Cursor
+
+桌面版和命令行 `cursor-agent` 都读用户级的 `~/.cursor/hooks.json`。用脚本往里合并 8 个条目，文件里其他工具的条目不受影响：
+
+```bash
+cd /path/to/clawd-mood
+uv run tools/cursor_hooks.py install
+```
+
+Cursor 会自动重载这个文件，新开一个对话就生效。条目指向仓库里 `plugin/scripts/hook.py` 的绝对路径，改了代码不用重装；仓库挪了位置要再跑一次 `install`。`hooks.json` 里有注释时脚本不会改写它，而是打印要手动加的内容。执行情况在 Customize 的 Hooks 页，或输出面板的 Hooks 频道。
+
+限制：
+
+- Cursor 没有审批事件，所以**不显示 waiting**；不读会话标题，标签是工作区目录名；子代理不显示小跟班（它的结束事件不带子代理 ID）
+- hook 是同步执行的，每次工具调用多等约 50ms
+- `cursor-agent -p`（非交互）不触发提交和结束事件，只显示 working，进程退出时移除
+- 不用 Cursor 插件的形式，因为命令行只在用户级或项目级 hooks 里配了提交和结束事件时才会触发它们，只装插件就看不到 thinking 和 done
+- Cursor 默认会导入已装的 Claude Code 插件；导入的那份 hook 在 Cursor 里会自动跳过，不会重复显示
+- 桌面版尚未端到端验证（命令行已验证）
+
 #### 同时挂
 
-多端可同时跑，每个会话各占一格，左上角标来源：`CC`（Claude Code）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`WB`（WorkBuddy / CodeBuddy Code）、`DS`（DeepSeek Harness）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
+多端可同时跑，每个会话各占一格，左上角标来源：`CC`（Claude Code）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`WB`（WorkBuddy / CodeBuddy Code）、`DS`（DeepSeek Harness）、`CU`（Cursor）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
 
 ### 3. 屏幕说明
 
@@ -253,16 +273,16 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据（目前支持 Claude Code 和 Codex），读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
 
-不同工具显示不同的小人，造型来自各自的 logo。下面的造型和颜色是默认主题「经典」的，换主题后状态含义不变，外观以主题为准（见[配置页](#5-配置页换主题调方向和亮度)）。Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫。同一工具的多个会话长得一样，靠标题区分。
+不同工具显示不同的小人，造型来自各自的 logo。下面的造型和颜色是默认主题「经典」的，换主题后状态含义不变，外观以主题为准（见[配置页](#5-配置页换主题调方向和亮度)）。Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫，Cursor 是灰色的等距立方体。同一工具的多个会话长得一样，靠标题区分。
 
 | 状态     | 地砖色 / 右上角图标 | 触发                                                                  |
 | -------- | ------------- | --------------------------------------------------------------------- |
-| Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi）   |
+| Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi、Cursor） |
 | Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中                                            |
 | Working  | 绿 / 键盘 | 调用工具 / 压缩完恢复                                                 |
-| Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 桥接无）                             |
+| Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 桥接、Cursor 无）                    |
 | Done     | 白 / 对勾 | 回答完成（3 秒瞬态）                                                  |
-| Error    | 红 / 叉号，红框 | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi）                 |
+| Error    | 红 / 叉号，红框 | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi、Cursor）         |
 | Sleeping | 深灰 / Z | 5 分钟无事件（Working 为 15 分钟，Waiting 不睡）；30 分钟无事件的会话会从屏幕移除 |
 
 各端能显示的状态：
@@ -276,6 +296,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 | WorkBuddy        | 插件 hooks（同 Claude）   | ✓       | ✓     | ✓    | ✓               |
 | DeepSeek Harness | 原生插件                  | ✓       | ✓     | —    | ✓               |
 | DeepSeek Harness | 官方 Claude Code hook 桥接 | —      | —     | —    | —               |
+| Cursor           | 用户级 hooks（同步）      | —       | ✓     | 仅开始 | ✓             |
 
 ### 4. 快速验证
 
@@ -406,6 +427,9 @@ pi remove /path/to/clawd-mood/plugin/adapters/pi/clawd-mood.ts
 codebuddy plugin uninstall clawd-mood@clawd-mood
 codebuddy plugin marketplace remove clawd-mood
 
+# Cursor（只删 clawd-mood 的条目）
+uv run tools/cursor_hooks.py uninstall
+
 # DeepSeek Harness 原生插件：桌面版在插件管理里移除；命令行 / web 版
 dsh plugin --profile web remove clawd-mood-dsh
 # DeepSeek Harness 桥接：从 cordis.patch.yml 删掉 clawd-mood-hooks 这段（别把文件删空，空 patch 会导致启动失败）
@@ -441,6 +465,7 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
 - **Codex 里屏幕完全没反应**：hook 还没被信任，或更新插件后信任失效了，在 codex 里运行 `/hooks` 审阅并信任
 - **OpenCode 屏幕没反应**：确认版本 ≥ 2.0、软链有效，运行 `opencode reload` 或重启后台服务让插件重新加载
+- **Cursor 屏幕没反应**：在输出面板的 Hooks 频道看有没有 `hook.py` 的执行记录。没有就确认 `~/.cursor/hooks.json` 里有 clawd-mood 的条目，路径指向现在的仓库；有记录但报错，多半是从程序坞启动的 Cursor 找不到 `uv`
 - **DeepSeek Harness 屏幕没反应**：会话要提交过 prompt 才上屏。原生插件：确认装在了正在用的 profile（桌面版是 `desktop`）。桥接：daemon 不会被它拉起，先手动启动；再确认 profile 里装了桥接包、`configPath` 是绝对路径（路径错误时桥接只打警告，不注册 hook）
 
 ## 许可证

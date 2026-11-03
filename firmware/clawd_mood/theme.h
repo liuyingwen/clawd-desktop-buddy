@@ -43,7 +43,7 @@ struct Skin {
   EyeStyle eyes;
   bool knotHat;
 };
-#define SKIN_COUNT 6      // same agents in the same order in every theme
+#define SKIN_COUNT 7      // same agents in the same order in every theme
 
 // One role per field: nothing borrows a state colour for an unrelated job.
 struct Palette {
@@ -132,7 +132,7 @@ struct Session {
   char id[9];
   char name[65];    // working directory, UTF-8
   char title[65];   // session title, kept once known
-  char src[3];      // "CC", "CX", "OC", "PI", "DS", "WB" or another agent's tag, may be empty
+  char src[3];      // "CC", "CX", "OC", "PI", "DS", "WB", "CU" or another agent's tag, may be empty
   Mood mood;        // what the screen shows: own, or waiting for a follower
   Mood own;         // the main agent's state
   unsigned long ownSinceMs;

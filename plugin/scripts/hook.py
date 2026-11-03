@@ -6,15 +6,18 @@
 """clawd-mood hook — maps CLI hook events to ESP32 states via TCP.
 
 Receives hook JSON on stdin (from Claude Code / Codex CLI / WorkBuddy /
-DeepSeek Harness), looks up the event in EVENT_TO_STATE, then opens a short
-TCP connection to the daemon and sends a single NDJSON line tagged with the
-session it came from. On SessionStart, spawns the daemon detached if it is not
-already running. Pure stdlib (no third-party deps) so uv run is fast
+DeepSeek Harness / Cursor), looks up the event in EVENT_TO_STATE, then opens a
+short TCP connection to the daemon and sends a single NDJSON line tagged with
+the session it came from. On SessionStart, spawns the daemon detached if it is
+not already running. Pure stdlib (no third-party deps) so uv run is fast
 (~80-200ms cached), and DeepSeek Harness can run it with plain python3 (uv
 cannot init its cache in that sandbox).
 
-Pass "codex" or "dsh" as argv[1] from those hook configs; otherwise the source
-is WorkBuddy or Claude Code, told apart by environment.
+Pass "codex", "dsh" or "cursor" as argv[1] from those hook configs (Cursor's
+entries are written by tools/cursor_hooks.py); otherwise the source is
+WorkBuddy or Claude Code, told apart by environment. Cursor hooks are
+synchronous, so this must never write to stdout: an empty reply lets the
+action through, anything else is parsed as the hook's decision.
 """
 
 from __future__ import annotations  # `int | None` on the python3 macOS ships
@@ -36,24 +39,48 @@ EVENT_TO_STATE = {
     "UserPromptSubmit":   "thinking",
     "PreToolUse":         "working",
     "PostToolUse":        "working",
-    "PostToolUseFailure": "working",     # Claude Code only; e.g. `diff` exiting 1, the agent carries on
+    "PostToolUseFailure": "working",     # Claude Code, Cursor; e.g. `diff` exiting 1, the agent carries on
     "Notification":       "waiting",     # Claude Code only
     "Stop":               "done",
-    "StopFailure":        "error",       # Claude Code only
+    "StopFailure":        "error",       # Claude Code, Cursor
     "PermissionRequest":  "waiting",
     "PreCompact":         "thinking",
     "PostCompact":        "working",
-    "Interrupt":          "idle",        # Codex only
+    "Interrupt":          "idle",        # Codex, Cursor
     "SessionEnd":         "idle",
     "SubagentStart":      "thinking",    # only ever drives a follower, see main()
     "SubagentStop":       "done",
 }
+
+# Cursor's own event names, renamed to the ones above. Cursor has no event for
+# a pending approval or for the end of a compaction, and its subagentStop
+# doesn't say which subagent ended, so it gets no followers.
+CURSOR_EVENTS = {
+    "sessionStart":       "SessionStart",
+    "beforeSubmitPrompt": "UserPromptSubmit",
+    "preToolUse":         "PreToolUse",
+    "postToolUse":        "PostToolUse",
+    "postToolUseFailure": "PostToolUseFailure",
+    "preCompact":         "PreCompact",
+    "stop":               "Stop",
+    "sessionEnd":         "SessionEnd",
+}
+CURSOR_STOPS = {"aborted": "Interrupt", "error": "StopFailure"}
 
 # Claude Code also notifies when a finished turn sits idle or auth succeeds;
 # neither is something pending. Payloads without a type keep meaning waiting.
 WAITING_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog"}
 
 MAX_DEVICE_FOLLOWERS = 12  # MAX_FOLLOWERS in the firmware; older goodbyes have nothing to remove
+
+
+def cursor_event(payload: dict) -> str | None:
+    event = CURSOR_EVENTS.get(payload.get("hook_event_name", ""))
+    if event == "Stop":
+        return CURSOR_STOPS.get(payload.get("status"), "Stop")
+    if event == "PostToolUseFailure" and payload.get("is_interrupt"):
+        return None  # the user cancelled; stop follows with status aborted
+    return event
 
 
 def tail_lines(path: str, limit: int = 256 * 1024) -> list[str]:
@@ -66,10 +93,12 @@ def tail_lines(path: str, limit: int = 256 * 1024) -> list[str]:
     return (lines[1:] if size > limit else lines)[::-1]
 
 
-def read_title(payload: dict, codex: bool) -> str | None:
+def read_title(payload: dict, source: str) -> str | None:
     """Best-effort session title from CLI-internal files; None when unavailable."""
+    if source == "cursor":
+        return None  # Cursor keeps chat titles in its own database
     try:
-        if codex:
+        if source == "codex":
             path = str(Path.home() / ".codex" / "session_index.jsonl")
             for line in tail_lines(path):
                 entry = json.loads(line)
@@ -95,19 +124,24 @@ def detect_shared_source() -> str:
     return "WB" if os.environ.get("CODEBUDDY_PLUGIN_ROOT") else "CC"
 
 
-def session_fields(payload: dict) -> dict:
+def session_fields(payload: dict, source: str) -> dict:
     """Short identity for the device (labels are cut to fit its 320-byte lines)."""
-    cwd = payload.get("cwd") or os.getcwd()
-    raw_id = payload.get("session_id") or cwd
+    if source == "cursor":
+        # User hooks run from ~/.cursor and only tool events carry cwd, so
+        # name the session after the workspace instead.
+        roots = payload.get("workspace_roots") or []
+        cwd = (roots[0] if roots else "") or os.environ.get("CURSOR_PROJECT_DIR") or os.getcwd()
+        raw_id = payload.get("conversation_id") or payload.get("session_id") or cwd
+    else:
+        cwd = payload.get("cwd") or os.getcwd()
+        raw_id = payload.get("session_id") or cwd
     short_id = hashlib.sha1(raw_id.encode()).hexdigest()[:8]
-    source = sys.argv[1] if len(sys.argv) > 1 else ""
-    codex = source == "codex"
     fields = {
         "session": short_id,
         "name": clean_label(os.path.basename(cwd.rstrip("/\\\\"))) or short_id,
-        "src": {"codex": "CX", "dsh": "DS"}.get(source) or detect_shared_source(),
+        "src": {"codex": "CX", "dsh": "DS", "cursor": "CU"}.get(source) or detect_shared_source(),
     }
-    title = clean_label(read_title(payload, codex) or "")
+    title = clean_label(read_title(payload, source) or "")
     if title:
         fields["title"] = title
     return fields
@@ -207,7 +241,15 @@ def main() -> None:
         payload = json.loads(sys.stdin.read())
     except json.JSONDecodeError:
         return
-    event = payload.get("hook_event_name", "")
+    source = sys.argv[1] if len(sys.argv) > 1 else ""
+    if source == "cursor":
+        event = cursor_event(payload) or ""
+    elif "cursor_version" in payload:
+        # Cursor also runs the hooks of installed Claude Code plugins; its
+        # sessions are reported by the cursor entries, not twice.
+        return
+    else:
+        event = payload.get("hook_event_name", "")
     tool = (payload.get("tool_name") or "")[:32]
     state = EVENT_TO_STATE.get(event)
     if state is None:
@@ -231,7 +273,7 @@ def main() -> None:
     port = read_portfile()
     if port is None:
         return  # daemon still warming up; next event will catch up
-    message = {"state": state, "event": event, "tool": tool, **session_fields(payload)}
+    message = {"state": state, "event": event, "tool": tool, **session_fields(payload, source)}
     if event == "SessionEnd":
         message["end"] = True
     if agent_id:
@@ -242,7 +284,7 @@ def main() -> None:
     session = message["session"]
     if event == "SessionEnd":
         journal_stamp(session).unlink(missing_ok=True)
-    else:
+    elif source != "cursor":  # Claude Code's workflow journals; Cursor hooks are synchronous
         lines += [
             {"state": "done", "event": "WorkflowAgentDone", "session": session, "agent": agent[-6:], "gone": True}
             for agent in finished_workflow_agents(payload, session)

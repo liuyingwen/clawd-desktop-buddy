@@ -86,6 +86,14 @@ static const Skin SKINS[] = {
           ".BFFFFFFFFB.",
           ".BBBBBBBBBB."},
    HI, 0, MID, BG, 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
+  {"CU", {"....AAAA....",      // isometric cube: dim top over two lit sides
+          "..AAAAAAAA..",
+          ".BAAAAAAAAF.",
+          ".BBBAAAAFFF.",
+          ".BBBBBFFFFF.",
+          ".BBBBBFFFFF.",
+          "...BBBFFF..."},
+   HI, MID, HI, BG, 0, 11, 3, 7, 2, 3, 7, 4, EYES_SQUARE},
 };
 static_assert(sizeof(SKINS) / sizeof(SKINS[0]) == SKIN_COUNT, "every theme carries all agents");
 
@@ -339,7 +347,7 @@ static void drawRow(const Session& s, const RowLayout& L, int16_t ox, int16_t y,
 
 static const char* command(const char* src) {
   static const char* const CMD[SKIN_COUNT][2] = {
-    {"CC", "claude"}, {"CX", "codex"}, {"OC", "opencode"}, {"PI", "pi"}, {"DS", "dsh"}, {"WB", "workbuddy"}};
+    {"CC", "claude"}, {"CX", "codex"}, {"OC", "opencode"}, {"PI", "pi"}, {"DS", "dsh"}, {"WB", "workbuddy"}, {"CU", "cursor"}};
   for (const auto& c : CMD) {
     if (!strcmp(c[0], src)) return c[1];
   }

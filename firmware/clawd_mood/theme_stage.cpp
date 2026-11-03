@@ -93,6 +93,14 @@ static const Skin SKINS[] = {
           ".BFFFFFFFFB.",
           ".BBBBBBBBBB."},
    TEAL, 0, BACK, TEAL, 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
+  {"CU", {"....AAAA....",      // isometric cube as a prop crate: cream top, gold and plank sides
+          "..AAAAAAAA..",
+          ".BAAAAAAAAF.",
+          ".BBBAAAAFFF.",
+          ".BBBBBFFFFF.",
+          ".BBBBBFFFFF.",
+          "...BBBFFF..."},
+   GOLD, CREAM, PLANK, BACK, 0, 11, 3, 7, 2, 3, 7, 4, EYES_SQUARE},
 };
 static_assert(sizeof(SKINS) / sizeof(SKINS[0]) == SKIN_COUNT, "every theme carries all agents");
 
