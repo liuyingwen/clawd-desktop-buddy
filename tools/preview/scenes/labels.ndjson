@@ -1,0 +1,7 @@
+{"t":100,"send":{"state":"working","session":"s0","name":"clawd-mood","src":"CC"}}
+{"t":500,"send":{"state":"working","session":"s0","name":"other-dir","title":"多会话桌面小队的主题系统设计与实现","src":"CC"}}
+{"t":900,"send":{"state":"working","session":"s0","name":"third-dir","src":"CC"}}
+{"t":1300,"send":{"state":"working","session":"s1","name":"a-very-long-ascii-session-name","src":"CX"}}
+{"t":1300,"send":{"state":"idle","session":"s2","title":"多会话桌面小队的主题系统","name":"x","src":"DS"}}
+{"t":1300,"send":{"state":"thinking","session":"s3","title":"😀 emoji 与 GB2312 外字符","name":"x","src":"WB"}}
+{"t":2300,"end":true}

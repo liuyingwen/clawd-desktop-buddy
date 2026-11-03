@@ -30,6 +30,7 @@
 - **Waiting 不进入 sleeping**：否则离开 5 分钟后待批准会被隐藏。
 - **Working 15 分钟才进入 sleeping**：长工具调用期间没有事件，5 分钟会把正在跑的构建显示成睡着。
 - **30 分钟过期**：CLI 崩溃不会发 SessionEnd。
+- **压缩结束恢复压缩前的状态**：压缩也会在回合之外发生，之后没有 `Stop`。固件记住 `PreCompact` 前的状态，原来是 working / thinking 才回 working，否则回 idle，不然会一直停在 working。
 - **标签优先显示会话标题**：读 CLI 内部数据，读不到时退回目录名；固件保留最近的标题，避免偶发读取失败造成跳变。
 - **中文字体**：wqy 12 像素 GB2312，约占 208 KB 闪存；分屏单元格一行约放 9 个汉字。
 
@@ -47,7 +48,9 @@
 | 等待批准（waiting） | 全身变黄、举手高跳；主小人同时显示 waiting 并翻页 |
 | 结束（`SubagentStop`） | `^` 眼跳跃撒彩屑 1.5 秒后消失，后面的依次补位 |
 
-没收到 `SubagentStop` 时，15 分钟无事件后移除。工具失败仍显示 working。
+没收到 `SubagentStop` 时，工具执行中 15 分钟无事件后移除，工具之间（最后一条是 `PostToolUse` / `PostToolUseFailure`）2 分钟无事件后移除。工具之间 p99 约 95 秒、最长约 300 秒（一次 49 个 agent 的 Workflow 实测），所以偶尔会提前移除，下个工具事件时重新出现；这比已结束的跟班继续敲 15 分钟键盘好。工具失败仍显示 working。
+
+Claude Code 的 Workflow 子代理完全不发 `SubagentStart` / `SubagentStop`。`hook.py` 读 Workflow 的 `journal.jsonl`，给有 `result` 记录的 agent 补发 `gone`。hook 只在事件到来时运行，所以最后一批结束的跟班可能仍要靠上面的超时移除。
 
 各 agent 的子代理来源：
 
@@ -57,3 +60,14 @@
 | OpenCode | `session.created` 带 `parentID` 的子会话 | `session.execution.*` 结束或 `session.deleted` |
 | pi | 环境变量 `CLAWD_MOOD_PI_OWNER` 不是自己的子进程 | `agent_settled` / `session_shutdown` |
 | DeepSeek Harness | `header.origin === "subagent"`，嵌套的归到顶层 | `turn-stopping` / `agent/error` / `agent/disposed` |
+
+## 主题与设置
+
+本文的颜色和造型是主题 1 的值。完整设计见 [配置页与主题](2026-11-02-config-page-themes-design.md)。
+
+外观从 sketch 拆到 `theme.h` 的 `Theme`：调色板按角色分（`plate` / `tileBorder` / `text` / `tag` / `more` / `pagerOn` / `pagerOff` / `smoke` / `toastBg` 等，不借用状态色）、6 个角色造型、图标集，以及可选钩子 `cellBg` / `tile` / `idleScreen` / `overlay`（空钩子走内置绘制）。加主题只需一个 `theme_*.cpp` 和 `THEME_TABLE` 一项；id 只增不复用，`THEMES[0]` 是主题 1。
+
+- 主题 1 `classic`（经典）：拆分前的外观，帧 hash 与拆分前一致，唯一的差别是修掉了翻页时来源标签折行到左边的残影（`setTextWrap(false)`）
+- 主题 2 `noir`（午夜）：深色地面 + 霓虹。CX / OC / PI 的身体、四肢、帽子改成亮色；等待改为暗琥珀底闪烁，琥珀图标和跟班不会融进背景；每 4 行一条 3/4 亮度扫描线（14400 像素）；无会话时是月亮星空动画
+
+设置走 `{"cfg":{"theme":N,"rotation":R,"brightness":B}}`，语义见 CLAUDE.md「串口协议」。背光改用 LEDC（5 kHz，8 位）驱动 `TFT_BLK`。预览图由 `tools/preview/render.py` 用真实固件帧生成，不手绘。

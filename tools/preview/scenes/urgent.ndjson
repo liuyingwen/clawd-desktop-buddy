@@ -1,0 +1,17 @@
+{"t":100,"send":{"state":"working","session":"s0","name":"配置页","src":"CC"}}
+{"t":100,"send":{"state":"working","session":"s1","name":"clawd-mood","src":"CX"}}
+{"t":100,"send":{"state":"working","session":"s2","name":"一个很长很长很长的中文标题超出单元格","src":"OC"}}
+{"t":100,"send":{"state":"working","session":"s3","name":"react-agent","src":"PI"}}
+{"t":100,"send":{"state":"working","session":"s4","name":"hook.py","src":"DS"}}
+{"t":100,"send":{"state":"working","session":"s5","name":"daemon","src":"WB"}}
+{"t":100,"send":{"state":"working","session":"s6","name":"firmware","src":"ZZ"}}
+{"t":100,"send":{"state":"working","session":"s7","name":"tools","src":"CC"}}
+{"t":100,"send":{"state":"working","session":"s8","name":"docs","src":"CX"}}
+{"t":100,"send":{"state":"working","session":"s9","name":"plugin","src":"OC"}}
+{"t":100,"send":{"state":"working","session":"s10","name":"page","src":"PI"}}
+{"t":1000,"send":{"state":"waiting","session":"s9","src":"CC"}}
+{"t":3000,"send":{"state":"working","session":"s9","src":"CC"}}
+{"t":5000,"send":{"state":"error","session":"s10","src":"CX"}}
+{"t":7000,"send":{"state":"waiting","session":"s5","src":"DS","quiet":true}}
+{"t":9000,"send":{"state":"waiting","session":"s6","src":"OC","agent":"c00001","event":"PermissionRequest"}}
+{"t":24000,"end":true}

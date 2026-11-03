@@ -1,0 +1,6 @@
+{"preview":{"settle_ms":1000,"loop_ms":7200}}
+{"t":100,"send":{"state":"working","session":"s0","name":"clawd-mood","title":"固件主题","src":"CC"}}
+{"t":100,"send":{"state":"thinking","session":"s1","name":"codex","title":"重构守护进程","src":"CX"}}
+{"t":100,"send":{"state":"error","session":"s2","name":"deepseek","title":"接口报错","src":"DS"}}
+{"t":100,"send":{"state":"sleeping","session":"s3","name":"workbuddy","title":"午休中","src":"WB"}}
+{"t":1300,"end":true}

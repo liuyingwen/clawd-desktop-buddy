@@ -1,0 +1,6 @@
+{"t":100,"send":{"state":"idle","session":"s0","name":"配置页","src":"CC"}}
+{"t":100,"send":{"state":"thinking","session":"s1","name":"clawd-mood","src":"CX"}}
+{"t":100,"send":{"state":"working","session":"s2","name":"一个很长很长很长的中文标题超出单元格","src":"OC"}}
+{"t":100,"send":{"state":"waiting","session":"s3","name":"react-agent","src":"PI"}}
+{"t":100,"send":{"state":"done","session":"s4","name":"hook.py","src":"DS"}}
+{"t":11500,"end":true}

@@ -1,0 +1,9 @@
+{"t":100,"send":{"state":"idle","session":"s0","name":"p","src":"CC"}}
+{"t":200,"send":{"state":"working","session":"s0","agent":"a0","src":"CC","event":"PostToolUse"}}
+{"t":200,"send":{"state":"working","session":"s0","agent":"a1","src":"CC","event":"PreToolUse"}}
+{"t":1000,"record":false}
+{"t":119000,"record":true}
+{"t":122000,"record":false}
+{"t":301000,"record":true}
+{"t":303000,"send":{"state":"working","session":"s0","agent":"a1","src":"CC","event":"PreToolUse"}}
+{"t":304000,"end":true}

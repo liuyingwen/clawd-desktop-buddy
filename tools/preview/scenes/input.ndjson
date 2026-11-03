@@ -1,0 +1,10 @@
+{"t":100,"send":{"state":"working","session":"s0","name":"p","src":"CC"}}
+{"t":400,"send":{"state":"thinking","session":"s0","event":"PreCompact"}}
+{"t":800,"send":{"state":"working","session":"s0","event":"PostCompact"}}
+{"t":1100,"send":{"state":"thinking","session":"s1","name":"q","src":"OC","event":"PreCompact"}}
+{"t":1400,"send":{"state":"working","session":"s1","event":"PostCompact"}}
+{"t":1600,"raw":"not json"}
+{"t":1700,"send":{"state":"nope","session":"s0"}}
+{"t":1800,"raw":""}
+{"t":1900,"send":{"state":"idle"}}
+{"t":2600,"end":true}

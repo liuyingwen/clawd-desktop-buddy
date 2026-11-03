@@ -53,6 +53,8 @@ EVENT_TO_STATE = {
 # neither is something pending. Payloads without a type keep meaning waiting.
 WAITING_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog"}
 
+MAX_DEVICE_FOLLOWERS = 12  # MAX_FOLLOWERS in the firmware; older goodbyes have nothing to remove
+
 
 def tail_lines(path: str, limit: int = 256 * 1024) -> list[str]:
     """Last lines of a possibly huge JSONL file, newest first."""
@@ -109,6 +111,50 @@ def session_fields(payload: dict) -> dict:
     if title:
         fields["title"] = title
     return fields
+
+
+def journal_stamp(session: str) -> Path:
+    return Path(tempfile.gettempdir()) / f"clawd-mood-journal-{session}.json"
+
+
+def finished_workflow_agents(payload: dict, session: str) -> list[str]:
+    """Workflow subagents fire no SubagentStop; their journal is the only end signal.
+
+    CLI-internal, so best-effort: the device times followers out anyway. Hook runs
+    race on the stamp, which at worst repeats a goodbye the device ignores.
+    """
+    finished: list[str] = []
+    try:
+        transcript = payload.get("transcript_path")
+        if not transcript:
+            return finished
+        journals = list(Path(transcript).with_suffix("").glob("subagents/workflows/*/journal.jsonl"))
+        if not journals:
+            return finished
+        stamp = journal_stamp(session)
+        try:
+            read_upto = json.loads(stamp.read_text())
+        except (OSError, ValueError):
+            read_upto = {}
+        before = dict(read_upto)
+        for journal in journals:
+            offset = read_upto.get(journal.parent.name, 0)
+            with open(journal, "rb") as f:
+                f.seek(offset)
+                chunk = f.read()
+            chunk = chunk[:chunk.rfind(b"\n") + 1]  # a line may still be mid-write
+            read_upto[journal.parent.name] = offset + len(chunk)
+            for line in chunk.splitlines():
+                entry = json.loads(line)
+                if entry.get("type") == "result" and entry.get("agentId"):
+                    finished.append(entry["agentId"])
+        if read_upto != before:
+            scratch = stamp.with_name(f"{stamp.name}.{os.getpid()}")
+            scratch.write_text(json.dumps(read_upto))
+            os.replace(scratch, stamp)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return finished[-MAX_DEVICE_FOLLOWERS:]
 
 
 def read_portfile() -> int | None:
@@ -192,10 +238,19 @@ def main() -> None:
         message["agent"] = agent_id[-6:]
         if event == "SubagentStop":
             message["gone"] = True
-    line = json.dumps(message, ensure_ascii=False) + "\n"
+    lines = [message]
+    session = message["session"]
+    if event == "SessionEnd":
+        journal_stamp(session).unlink(missing_ok=True)
+    else:
+        lines += [
+            {"state": "done", "event": "WorkflowAgentDone", "session": session, "agent": agent[-6:], "gone": True}
+            for agent in finished_workflow_agents(payload, session)
+        ]
+    data = "".join(json.dumps(m, ensure_ascii=False) + "\n" for m in lines)
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.3) as s:
-            s.sendall(line.encode("utf-8"))
+            s.sendall(data.encode("utf-8"))
     except OSError:
         pass  # daemon not responding; silently drop
 

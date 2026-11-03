@@ -9,6 +9,8 @@
 #include <SPI.h>
 #include <ArduinoJson.h>
 #include <U8g2_for_Adafruit_GFX.h>
+#include <Preferences.h>
+#include "theme.h"
 
 #define TFT_CS  4
 #define TFT_DC  1
@@ -27,6 +29,7 @@
 #define MAX_FOLLOWERS  12                 // subagents remembered per session
 #define FOLLOWER_LEAVE_MS  1500UL         // celebrates this long after SubagentStop
 #define FOLLOWER_EXPIRE_MS (15UL*60*1000) // same patience as a long tool call
+#define FOLLOWER_PAUSE_MS  (2UL*60*1000)  // no tool running: finished, or it comes back on its next tool
 #define FOLLOWER_DROP_MS   400UL          // falls into line when it appears
 #define PER_PAGE       4
 #define PAGE_ROTATE_MS 5000UL
@@ -37,41 +40,30 @@
 #define PAGER_H        4
 
 #define LINE_MAX 320
+#define SERIAL_RX_BYTES 4096  // input is only read between frames; the default 256 loses lines
+
+#define DEFAULT_ROTATION   1
+#define DEFAULT_BRIGHTNESS 100
+#define MIN_BRIGHTNESS     10
+#define MAX_BRIGHTNESS     100
+#define BLK_PWM_HZ         5000
+#define BLK_PWM_BITS       8
+#define SAVE_DELAY_MS      1500UL   // dragging a slider costs one flash write, not one per step
+#define TOAST_MS           3000UL
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas16 canvas(DISP_W, DISP_H);   // full-screen buffer: no flicker between cells
 U8G2_FOR_ADAFRUIT_GFX labelFont;       // Chinese-capable text for session labels
 
-uint16_t C_CREAM, C_DIVIDER, C_INK;
-uint16_t C_IDLE, C_THINKING, C_WORKING, C_WAITING, C_DONE, C_ERROR, C_SLEEPING;
-uint16_t bodyColors[6];
-
-enum Mood {
-  MOOD_IDLE, MOOD_THINKING, MOOD_WORKING, MOOD_WAITING,
-  MOOD_DONE, MOOD_ERROR, MOOD_SLEEPING, MOOD_UNKNOWN
-};
-
-enum EyeStyle { EYES_SQUARE, EYES_SLASH };
-
-// Each agent's logo as a character. rows is the 12x7 torso: B body, A accent,
-// F face, anything else transparent. Columns below are in the same grid.
-struct Skin {
-  const char* src;
-  const char* rows[7];
-  uint16_t body, accent, face, eye;
-  int8_t armL, armR;      // -1 = no arm
-  int8_t legL, legR;
-  uint8_t legW;
-  int8_t eyeL, eyeR;      // eyeR -1 = single eye
-  int8_t eyeY;
-  EyeStyle eyes;
-  bool knotHat;
-};
+#define THEME_ENTRY(t) &t,
+const Theme* const THEMES[] = {THEME_TABLE(THEME_ENTRY)};
+const Theme* T = THEMES[0];
 
 struct Follower {
   char id[7];
   Mood mood;
   bool leaving;
+  bool betweenTools;
   unsigned long bornMs, moodSinceMs, lastEventMs;
 };
 
@@ -83,6 +75,7 @@ struct Session {
   Mood mood;        // what the screen shows: own, or waiting for a follower
   Mood own;         // the main agent's state
   unsigned long ownSinceMs;
+  Mood beforeCompact;  // own when compaction began, MOOD_UNKNOWN when not compacting
   Follower followers[MAX_FOLLOWERS];
   uint8_t followerCount;
   uint8_t color;
@@ -106,36 +99,7 @@ unsigned long lastFrameMs = 0;
 char lineBuf[LINE_MAX];
 size_t lineLen = 0;
 
-void initColors() {
-  C_CREAM    = tft.color565(255, 241, 214);
-  C_DIVIDER  = tft.color565(40, 34, 30);
-  C_INK      = ST77XX_BLACK;
-  C_IDLE     = tft.color565(150, 150, 150);
-  C_THINKING = tft.color565(40, 110, 240);
-  C_WORKING  = tft.color565(30, 170, 70);
-  C_WAITING  = tft.color565(255, 205, 0);
-  C_DONE     = ST77XX_WHITE;
-  C_ERROR    = tft.color565(225, 30, 30);
-  C_SLEEPING = tft.color565(70, 70, 76);
-  bodyColors[0] = tft.color565(240, 120, 30);   // orange
-  bodyColors[1] = tft.color565(30, 170, 170);   // teal
-  bodyColors[2] = tft.color565(235, 90, 150);   // pink
-  bodyColors[3] = tft.color565(130, 90, 210);   // purple
-  bodyColors[4] = tft.color565(150, 110, 60);   // brown
-  bodyColors[5] = tft.color565(90, 140, 40);    // moss
-}
-
-uint16_t stateColor(Mood m) {
-  switch (m) {
-    case MOOD_THINKING: return C_THINKING;
-    case MOOD_WORKING:  return C_WORKING;
-    case MOOD_WAITING:  return C_WAITING;
-    case MOOD_DONE:     return C_DONE;
-    case MOOD_ERROR:    return C_ERROR;
-    case MOOD_SLEEPING: return C_SLEEPING;
-    default:            return C_IDLE;
-  }
-}
+uint16_t stateColor(Mood m) { return T->pal.state[m < MOOD_UNKNOWN ? m : MOOD_IDLE]; }
 
 Mood parseMood(const char* s) {
   if (!s) return MOOD_UNKNOWN;
@@ -183,6 +147,7 @@ int8_t addSession(const char* id, const char* name, const char* src) {
   strlcpy(s.src, src, sizeof(s.src));
   s.title[0] = 0;
   s.mood = s.own = MOOD_IDLE;
+  s.beforeCompact = MOOD_UNKNOWN;
   s.followerCount = 0;
   s.color = nextColor++ % 6;
   s.moodSinceMs = s.ownSinceMs = millis();
@@ -225,7 +190,7 @@ int8_t findFollower(const Session& s, const char* id) {
   return -1;
 }
 
-void handleFollower(Session& s, const char* id, Mood next, bool gone) {
+void handleFollower(Session& s, const char* id, Mood next, bool gone, const char* event) {
   unsigned long now = millis();
   int8_t i = findFollower(s, id);
   if (gone) {
@@ -259,6 +224,7 @@ void handleFollower(Session& s, const char* id, Mood next, bool gone) {
     f.moodSinceMs = now;
   }
   f.lastEventMs = now;
+  f.betweenTools = event && (!strcmp(event, "PostToolUse") || !strcmp(event, "PostToolUseFailure"));
 }
 
 void tickSessions() {
@@ -272,7 +238,8 @@ void tickSessions() {
     }
     for (int8_t j = s.followerCount - 1; j >= 0; j--) {
       const Follower& f = s.followers[j];
-      if (f.leaving ? now - f.moodSinceMs > FOLLOWER_LEAVE_MS : now - f.lastEventMs > FOLLOWER_EXPIRE_MS) {
+      unsigned long patience = f.betweenTools ? FOLLOWER_PAUSE_MS : FOLLOWER_EXPIRE_MS;
+      if (f.leaving ? now - f.moodSinceMs > FOLLOWER_LEAVE_MS : now - f.lastEventMs > patience) {
         removeFollower(s, j);
       }
     }
@@ -287,12 +254,120 @@ void tickSessions() {
   }
 }
 
+// ── Settings ────────────────────────────────────────────────────
+// {"cfg":{"theme":N,"rotation":R,"brightness":B}}, every key optional.
+
+Preferences prefs;
+uint8_t rotation = DEFAULT_ROTATION;
+uint8_t brightness = DEFAULT_BRIGHTNESS;
+uint8_t savedTheme, savedRotation, savedBrightness;   // what NVS holds
+bool settingsDirty = false;
+unsigned long settingsChangedMs = 0;
+char toast[64] = "";
+unsigned long toastUntilMs = 0;
+
+const Theme* findTheme(int id) {
+  for (const Theme* t : THEMES) {
+    if (t->id == id) return t;
+  }
+  return nullptr;
+}
+
+void setBacklight(uint8_t percent) {
+  uint32_t duty = percent * ((1UL << BLK_PWM_BITS) - 1) / 100;   // the core treats all ones as fully on
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(TFT_BLK, duty);
+#else
+  ledcWrite(0, duty);
+#endif
+}
+
+void beginBacklight() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  if (!ledcAttach(TFT_BLK, BLK_PWM_HZ, BLK_PWM_BITS)) {   // better fixed brightness than a dark screen
+    pinMode(TFT_BLK, OUTPUT);
+    digitalWrite(TFT_BLK, HIGH);
+    return;
+  }
+#else
+  ledcSetup(0, BLK_PWM_HZ, BLK_PWM_BITS);
+  ledcAttachPin(TFT_BLK, 0);
+#endif
+  setBacklight(brightness);
+}
+
+void loadSettings() {
+  prefs.begin("clawd-mood", false);
+  savedTheme = prefs.getUChar("theme", THEMES[0]->id);
+  savedRotation = prefs.getUChar("rotation", DEFAULT_ROTATION);
+  savedBrightness = prefs.getUChar("brightness", DEFAULT_BRIGHTNESS);
+  prefs.end();
+  // An id this firmware lacks (downgrade) draws theme 1 but stays saved, for the next upgrade
+  const Theme* t = findTheme(savedTheme);
+  T = t ? t : THEMES[0];
+  rotation = savedRotation <= 3 ? savedRotation : DEFAULT_ROTATION;
+  brightness = constrain(savedBrightness, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+}
+
+void tickSettingsSave() {
+  if (!settingsDirty || millis() - settingsChangedMs < SAVE_DELAY_MS) return;
+  settingsDirty = false;
+  if (T->id == savedTheme && rotation == savedRotation && brightness == savedBrightness) return;
+  prefs.begin("clawd-mood", false);
+  if (T->id != savedTheme) prefs.putUChar("theme", savedTheme = T->id);
+  if (rotation != savedRotation) prefs.putUChar("rotation", savedRotation = rotation);
+  if (brightness != savedBrightness) prefs.putUChar("brightness", savedBrightness = brightness);
+  prefs.end();
+}
+
+// The link is one-way, so the toast is the only confirmation the host's user gets
+void handleCfg(JsonObjectConst cfg) {
+  char msg[sizeof(toast)] = "";
+  size_t n = 0;
+  if (cfg["theme"].is<int>()) {
+    const Theme* t = findTheme(cfg["theme"].as<int>());
+    if (!t) t = THEMES[0];
+    if (t != T) {
+      T = t;
+      n += snprintf(msg + n, sizeof(msg) - n, "主题 %s  ", T->name);
+    }
+  }
+  if (cfg["rotation"].is<int>()) {
+    int r = cfg["rotation"].as<int>();
+    if (r >= 0 && r <= 3 && r != rotation) {
+      rotation = r;
+      tft.setRotation(rotation);
+      n += snprintf(msg + n, sizeof(msg) - n, "方向 %d°  ", rotation * 90);
+    }
+  }
+  if (cfg["brightness"].is<float>()) {
+    float b = constrain(cfg["brightness"].as<float>(), (float)MIN_BRIGHTNESS, (float)MAX_BRIGHTNESS);
+    if ((uint8_t)b != brightness) {
+      brightness = b;
+      setBacklight(brightness);
+      n += snprintf(msg + n, sizeof(msg) - n, "亮度 %d%%  ", brightness);
+    }
+  }
+  if (!n) return;
+  msg[n - 2] = 0;   // the separator after the last item
+  strlcpy(toast, msg, sizeof(toast));
+  toastUntilMs = millis() + TOAST_MS;
+  settingsDirty = true;
+  settingsChangedMs = millis();
+}
+
 void handleLine(const char* line) {
   if (!line[0]) return;
   StaticJsonDocument<512> doc;  // a line with a 16-character Chinese title needs ~290
   DeserializationError err = deserializeJson(doc, line);
   if (err) {
     Serial.print("[warn] bad json: "); Serial.println(line);
+    return;
+  }
+  // A settings line is never a session: not created, not touched, not woken
+  JsonVariantConst cfg = doc["cfg"];
+  if (!cfg.isNull()) {
+    if (cfg.is<JsonObjectConst>()) handleCfg(cfg);
     return;
   }
   const char* id = doc["session"] | "default";
@@ -323,11 +398,20 @@ void handleLine(const char* line) {
   s.lastEventMs = millis();
   bool quiet = false;
   if (agent) {
-    handleFollower(s, agent, next, gone);
+    handleFollower(s, agent, next, gone, doc["event"]);
     if (s.own == MOOD_SLEEPING) setOwn(s, MOOD_IDLE);
     syncMood(s);
     next = s.mood;
   } else {
+    // Compaction also runs between turns, where no Stop follows; only resume if a turn was on
+    const char* event = doc["event"] | "";
+    bool compacting = !strcmp(event, "PreCompact");
+    if (compacting && s.beforeCompact == MOOD_UNKNOWN) s.beforeCompact = s.own;
+    if (!strcmp(event, "PostCompact")) {
+      Mood was = s.beforeCompact != MOOD_UNKNOWN ? s.beforeCompact : s.own;
+      next = was == MOOD_WORKING || was == MOOD_THINKING ? MOOD_WORKING : MOOD_IDLE;
+    }
+    if (!compacting) s.beforeCompact = MOOD_UNKNOWN;
     setOwn(s, next);
     quiet = doc["quiet"] | false;
   }
@@ -391,19 +475,9 @@ void tickPaging() {
 
 // ── Drawing ─────────────────────────────────────────────────────
 
-// 7x7 state icons, one byte per row, bit 6 is the leftmost pixel
-const uint8_t ICON_GEAR_A[7]  = {0x08,0x5D,0x3E,0x77,0x3E,0x5D,0x08};
-const uint8_t ICON_GEAR_B[7]  = {0x22,0x1C,0x3E,0x36,0x3E,0x1C,0x22};
-const uint8_t ICON_KEYS_A[7]  = {0x00,0x7F,0x55,0x7F,0x6B,0x7F,0x00};
-const uint8_t ICON_KEYS_B[7]  = {0x00,0x7F,0x6B,0x7F,0x55,0x7F,0x00};
-const uint8_t ICON_ASK[7]     = {0x3E,0x63,0x03,0x0E,0x08,0x00,0x08};
-const uint8_t ICON_CHECK[7]   = {0x00,0x01,0x03,0x46,0x6C,0x38,0x10};
-const uint8_t ICON_CROSS[7]   = {0x63,0x77,0x3E,0x1C,0x3E,0x77,0x63};
-const uint8_t ICON_ZZZ[7]     = {0x7F,0x03,0x06,0x0C,0x18,0x30,0x7F};
-
 void drawIcon(int16_t x, int16_t y, const uint8_t* rows, uint8_t u, uint16_t col) {
-  // Black plate keeps every state colour readable on any cell background
-  canvas.fillRect(x - u, y - u, 9 * u, 9 * u, C_INK);
+  // The plate keeps every state colour readable on any cell background
+  canvas.fillRect(x - u, y - u, 9 * u, 9 * u, T->pal.plate);
   for (uint8_t r = 0; r < 7; r++) {
     for (uint8_t c = 0; c < 7; c++) {
       if (rows[r] & (0x40 >> c)) canvas.fillRect(x + c * u, y + r * u, u, u, col);
@@ -411,75 +485,11 @@ void drawIcon(int16_t x, int16_t y, const uint8_t* rows, uint8_t u, uint16_t col
   }
 }
 
-uint16_t dimColor(uint16_t c) { return (c >> 1) & 0x7BEF; }
-
-#define RGB(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
-
-const Skin SKINS[] = {
-  // First entry is also the fallback; unknown sources keep a rotating colour
-  {"CC", {".BBBBBBBBBB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBBB."},
-   RGB(218, 119, 86), 0, 0, ST77XX_BLACK, 0, 11, 2, 8, 2, 3, 7, 2, EYES_SQUARE},
-  {"CX", {"..BBBBBBBB..",      // little white buddy wearing the knot as a hat
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          "..BBBBBBBB.."},
-   RGB(16, 16, 16), 0, ST77XX_WHITE, ST77XX_BLACK, 0, 11, 3, 7, 2, 3, 7, 2, EYES_SQUARE, true},
-  {"OC", {".BBBBBBBBBB.",      // hollow black frame
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BBBBBBBBBB."},
-   RGB(16, 16, 16), 0, RGB(235, 235, 235), ST77XX_BLACK, 0, 11, 3, 7, 2, 3, 7, 2, EYES_SQUARE},
-  {"PI", {"BBBBBBBBB...",      // pixel P whose counter is a single eye, i as a leg
-          "BBBFFFFBB...",
-          "BBBFFFFBB...",
-          "BBBFFFFBB...",
-          "BBBBBB...BBB",
-          "BBBBBB...BBB",
-          "BBB......BBB"},
-   RGB(40, 40, 48), 0, ST77XX_WHITE, ST77XX_BLACK, -1, -1, 0, 9, 3, 4, -1, 1, EYES_SQUARE},
-  {"DS", {"..........BB",      // whale in profile, tail up
-          "..BBBBB..BB.",
-          ".BBBBBBB.BB.",
-          ".BBBBBBBBBB.",
-          ".BBBBBBBBB..",
-          ".AAAAAAA....",
-          "..AAAAAA...."},
-   RGB(77, 107, 254), RGB(190, 205, 255), 0, ST77XX_WHITE, 0, -1, 2, 6, 2, 2, -1, 2, EYES_SQUARE},
-  {"WB", {".B........B.",      // cat with a darker face
-          ".BB......BB.",
-          ".BBBBBBBBBB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BFFFFFFFFB.",
-          ".BBBBBBBBBB."},
-   RGB(13, 200, 165), 0, RGB(8, 120, 100), ST77XX_WHITE, 0, 11, 3, 7, 2, 3, 7, 3, EYES_SLASH},
-};
-
-// Codex hat: the logo as 30x30, one word per row, bit 29 is the leftmost pixel
-const uint32_t KNOT[30] = {
-  0x000FC000,0x003FE000,0x00707FC0,0x00E07FE0,0x00C1E070,
-  0x01838038,0x038F0418,0x0F8C1F0C,0x0D8C7BCC,0x198CE0EC,
-  0x398FF07C,0x318F3C1C,0x318C0F0E,0x318C0F86,0x31CC0DE3,
-  0x30FC0C63,0x187C0C63,0x1C1E1C63,0x0E073C63,0x0F83FC66,
-  0x0DE3CC66,0x0C7F0C7C,0x0C1C0C78,0x06003C70,0x0700F040,
-  0x0383C0C0,0x01FF8180,0x007F8780,0x0001FE00,0x00007800
-};
+uint16_t dimColor(uint16_t c) { return ((c >> 1) & 0x7BEF) + ((T->pal.sleepTarget >> 1) & 0x7BEF); }
 
 void drawKnot(int16_t x, int16_t y, int16_t size, uint16_t col) {
   for (int16_t py = 0; py < size; py++) {
-    uint32_t row = KNOT[py * 30 / size];
+    uint32_t row = T->knot[py * 30 / size];
     for (int16_t px = 0; px < size; px++) {
       if (row & (1UL << (29 - px * 30 / size))) canvas.fillRect(x + px, y + py, 1, 1, col);
     }
@@ -487,10 +497,10 @@ void drawKnot(int16_t x, int16_t y, int16_t size, uint16_t col) {
 }
 
 const Skin& skinFor(const char* src) {
-  for (const Skin& k : SKINS) {
-    if (!strcmp(k.src, src)) return k;
+  for (uint8_t i = 0; i < SKIN_COUNT; i++) {
+    if (!strcmp(T->skins[i].src, src)) return T->skins[i];
   }
-  return SKINS[0];
+  return T->skins[0];
 }
 
 void drawTorso(const Skin& k, uint16_t body, uint16_t accent, uint16_t face,
@@ -536,7 +546,7 @@ void drawEye(const Skin& k, int16_t ex, int16_t ey, uint8_t u, Mood m, unsigned 
 void drawCreature(const char* src, uint8_t color, Mood mood, unsigned long sinceMs, bool tinted,
                   int16_t x, int16_t feetY, uint8_t u, unsigned long now) {
   const Skin& k = skinFor(src);
-  uint16_t body = tinted ? C_WAITING : strcmp(k.src, src) ? bodyColors[color] : k.body;
+  uint16_t body = tinted ? T->pal.state[MOOD_WAITING] : strcmp(k.src, src) ? T->pal.fallback[color] : k.body;
   unsigned long t = now - sinceMs;
   uint8_t lift = max(u, (uint8_t)2);   // a 1px hop is invisible on a follower
 
@@ -592,13 +602,13 @@ void drawCreature(const char* src, uint8_t color, Mood mood, unsigned long since
     for (uint8_t i = 0; i < 6; i++) {
       int16_t cx = x + (i * 37 + now / 40) % (12 * u);
       int16_t cy = by + ((i * 53 + now / 15) % (4 * u));
-      canvas.fillRect(cx, cy, u / 2 + 1, u / 2 + 1, bodyColors[i % 6]);
+      canvas.fillRect(cx, cy, u / 2 + 1, u / 2 + 1, T->pal.confetti[i % 6]);
     }
   }
   if (mood == MOOD_ERROR) {              // smoke
     int16_t sy = by - ((now / 120) % 3) * u / 2;
-    canvas.fillRect(bx + 10 * u, sy, u, u, C_SLEEPING);
-    canvas.fillRect(bx + 11 * u, sy - u, u / 2 + 1, u / 2 + 1, C_SLEEPING);
+    canvas.fillRect(bx + 10 * u, sy, u, u, T->pal.smoke);
+    canvas.fillRect(bx + 11 * u, sy - u, u / 2 + 1, u / 2 + 1, T->pal.smoke);
   }
 }
 
@@ -620,7 +630,7 @@ void drawFollowers(const Session& s, int16_t x, int16_t w, int16_t feetY, uint8_
   }
   if (extra) {
     canvas.setTextSize(1);
-    canvas.setTextColor(C_INK);
+    canvas.setTextColor(T->pal.more);
     canvas.setCursor(left + shown * pitch + 1, feetY - 8);
     canvas.print('+');
     canvas.print(extra);
@@ -629,19 +639,23 @@ void drawFollowers(const Session& s, int16_t x, int16_t w, int16_t feetY, uint8_
 
 const uint8_t* iconFor(Mood m, unsigned long now) {
   switch (m) {
-    case MOOD_THINKING: return (now / 300) % 2 ? ICON_GEAR_A : ICON_GEAR_B;
-    case MOOD_WORKING:  return (now / 200) % 2 ? ICON_KEYS_A : ICON_KEYS_B;
-    case MOOD_WAITING:  return ICON_ASK;
-    case MOOD_DONE:     return ICON_CHECK;
-    case MOOD_ERROR:    return ICON_CROSS;
-    case MOOD_SLEEPING: return ICON_ZZZ;
+    case MOOD_THINKING: return (now / 300) % 2 ? T->icons.gearA : T->icons.gearB;
+    case MOOD_WORKING:  return (now / 200) % 2 ? T->icons.keysA : T->icons.keysB;
+    case MOOD_WAITING:  return T->icons.ask;
+    case MOOD_DONE:     return T->icons.check;
+    case MOOD_ERROR:    return T->icons.cross;
+    case MOOD_SLEEPING: return T->icons.zzz;
     default:            return nullptr;
   }
 }
 
 void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsigned long now) {
-  uint16_t bg = (s.mood == MOOD_WAITING && (now / 500) % 2) ? C_WAITING : C_CREAM;
-  canvas.fillRect(x, y, w, h, bg);
+  const Palette& P = T->pal;
+  if (T->ops.cellBg) {
+    T->ops.cellBg(x, y, w, h, s.mood, now);
+  } else {
+    canvas.fillRect(x, y, w, h, (s.mood == MOOD_WAITING && (now / 500) % 2) ? P.waitFlash : P.bg);
+  }
 
   const int16_t labelH = 15, tileH = 6;
   int16_t tileY = y + h - labelH - tileH;
@@ -653,8 +667,12 @@ void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsi
     if (12 * t <= w - 8 && 10 * t + 9 * ti + 2 <= tileY - y) { u = t; iu = ti; break; }
   }
 
-  canvas.fillRect(x + 4, tileY, w - 8, tileH, stateColor(s.mood));
-  canvas.drawRect(x + 4, tileY, w - 8, tileH, C_INK);
+  if (T->ops.tile) {
+    T->ops.tile(x + 4, tileY, w - 8, tileH, s.mood, now);
+  } else {
+    canvas.fillRect(x + 4, tileY, w - 8, tileH, stateColor(s.mood));
+    canvas.drawRect(x + 4, tileY, w - 8, tileH, P.tileBorder);
+  }
 
   drawCreature(s.src, s.color, s.mood, s.moodSinceMs, false, x + (w - 12 * u) / 2, tileY, u, now);
   drawFollowers(s, x, w, tileY - 9 * u - (u / 3 + 4), u >= 11 ? 2 : 1, now);
@@ -672,19 +690,24 @@ void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsi
     do { len--; } while (len && (label[len] & 0xC0) == 0x80);
     label[len] = 0;
   }
-  labelFont.setForegroundColor(C_INK);
+  labelFont.setForegroundColor(P.text);
   labelFont.drawUTF8(x + (w - labelFont.getUTF8Width(label)) / 2, tileY + tileH + 12, label);
 
   if (s.src[0]) {
     canvas.setTextSize(1);
-    canvas.setTextColor(C_INK);
+    canvas.setTextColor(P.tag);
     canvas.setCursor(x + 3, y + 3);
     canvas.print(s.src);
   }
   if (s.mood == MOOD_ERROR) {
-    canvas.drawRect(x, y, w, h, C_ERROR);
-    canvas.drawRect(x + 1, y + 1, w - 2, h - 2, C_ERROR);
+    canvas.drawRect(x, y, w, h, P.errorFrame);
+    canvas.drawRect(x + 1, y + 1, w - 2, h - 2, P.errorFrame);
   }
+}
+
+void drawLabelCentered(const char* text, int16_t baselineY, uint16_t col) {
+  labelFont.setForegroundColor(col);
+  labelFont.drawUTF8((DISP_W - labelFont.getUTF8Width(text)) / 2, baselineY, text);
 }
 
 void drawPage(uint8_t page, int16_t ox, int16_t contentH, unsigned long now) {
@@ -693,7 +716,7 @@ void drawPage(uint8_t page, int16_t ox, int16_t contentH, unsigned long now) {
   const int16_t half = (DISP_W - 2) / 2, right = half + 2;
   const int16_t halfH = (contentH - 2) / 2, lower = contentH - halfH;
 
-  canvas.fillRect(ox, 0, DISP_W, contentH, C_DIVIDER);
+  canvas.fillRect(ox, 0, DISP_W, contentH, T->pal.gap);
   const Session* s = sessions + first;
   switch (n) {
     case 1:
@@ -718,11 +741,11 @@ void drawPage(uint8_t page, int16_t ox, int16_t contentH, unsigned long now) {
 }
 
 void drawPager(uint8_t pages, uint8_t active, unsigned long now) {
-  canvas.fillRect(0, DISP_H - PAGER_H, DISP_W, PAGER_H, C_DIVIDER);
+  canvas.fillRect(0, DISP_H - PAGER_H, DISP_W, PAGER_H, T->pal.pagerBg);
   const int16_t dotW = 16, gap = 6;
   int16_t x = (DISP_W - pages * dotW - (pages - 1) * gap) / 2;
   for (uint8_t p = 0; p < pages; p++, x += dotW + gap) {
-    uint16_t col = p == active ? C_DONE : C_SLEEPING;
+    uint16_t col = p == active ? T->pal.pagerOn : T->pal.pagerOff;
     // Pages holding an urgent session blink in that state's colour
     for (uint8_t i = p * PER_PAGE; i < sessionCount && i < (p + 1) * PER_PAGE; i++) {
       if (isUrgent(sessions[i].mood) && !sessions[i].quiet && (now / 250) % 2) col = stateColor(sessions[i].mood);
@@ -731,12 +754,47 @@ void drawPager(uint8_t pages, uint8_t active, unsigned long now) {
   }
 }
 
+void drawToast() {
+  const int16_t h = 20, y = DISP_H - PAGER_H - h - 4;
+  canvas.fillRect(0, y, DISP_W, h, T->pal.toastBg);
+  canvas.drawFastHLine(0, y, DISP_W, T->pal.toastText);
+  drawLabelCentered(toast, y + 15, T->pal.toastText);
+}
+
+#ifdef CLAWD_PROFILE
+// Compile with -DCLAWD_PROFILE to measure on the device: every 5 s, frame cost in microseconds.
+// late = frames that took longer than their slot, so slides that run under 50 ms show up here.
+#define PROFILE_EVERY_MS 5000UL
+unsigned long profileSinceMs = 0, profileFrames = 0, profileLate = 0;
+unsigned long profileRenderSum = 0, profilePushSum = 0, profileRenderMax = 0, profilePushMax = 0;
+
+void profileFrame(unsigned long renderUs, unsigned long pushUs, unsigned long slotMs) {
+  profileFrames++;
+  profileRenderSum += renderUs;
+  profilePushSum += pushUs;
+  profileRenderMax = max(profileRenderMax, renderUs);
+  profilePushMax = max(profilePushMax, pushUs);
+  if (renderUs + pushUs > slotMs * 1000) profileLate++;
+  if (millis() - profileSinceMs < PROFILE_EVERY_MS) return;
+  Serial.printf("[profile] %s frames=%lu late=%lu render avg=%lu max=%lu push avg=%lu max=%lu\n", T->key,
+                profileFrames, profileLate, profileRenderSum / profileFrames, profileRenderMax,
+                profilePushSum / profileFrames, profilePushMax);
+  profileSinceMs = millis();
+  profileFrames = profileLate = profileRenderSum = profilePushSum = profileRenderMax = profilePushMax = 0;
+}
+#endif
+
 void render() {
+#ifdef CLAWD_PROFILE
+  unsigned long renderStartUs = micros();
+#endif
   unsigned long now = millis();
   uint8_t pages = pageCount();
   int16_t contentH = pages > 1 ? DISP_H - PAGER_H : DISP_H;
 
-  if (sessionCount == 0) {           // nobody connected: one sleeping creature
+  if (sessionCount == 0 && T->ops.idleScreen) {
+    T->ops.idleScreen(now);
+  } else if (sessionCount == 0) {    // nobody connected: one sleeping creature
     Session none = {};
     strlcpy(none.name, "no session", sizeof(none.name));
     none.mood = MOOD_SLEEPING;
@@ -749,19 +807,32 @@ void render() {
   } else {
     drawPage(currentPage, 0, contentH, now);
   }
+  if (T->ops.overlay) T->ops.overlay(now);
   if (pages > 1) drawPager(pages, slideTo >= 0 ? slideTo : currentPage, now);
+  if (toast[0]) {
+    if ((long)(toastUntilMs - now) > 0) drawToast();
+    else toast[0] = 0;
+  }
 
+#ifdef CLAWD_PROFILE
+  unsigned long pushStartUs = micros();
+#endif
   tft.drawRGBBitmap(0, 0, canvas.getBuffer(), DISP_W, DISP_H);
+#ifdef CLAWD_PROFILE
+  profileFrame(pushStartUs - renderStartUs, micros() - pushStartUs, slideTo >= 0 ? SLIDE_FRAME_MS : FRAME_MS);
+#endif
 }
 
 void setup() {
+  Serial.setRxBufferSize(SERIAL_RX_BYTES);
   Serial.begin(115200);
-  pinMode(TFT_BLK, OUTPUT); digitalWrite(TFT_BLK, HIGH);
+  loadSettings();
+  beginBacklight();
   SPI.begin(8, -1, 10, TFT_CS);   // SCK=8, MOSI=10 (ESP32-C3 pin remap)
   tft.setSPISpeed(40000000);
   tft.init(DISP_W, DISP_H);
-  tft.setRotation(1);
-  initColors();
+  tft.setRotation(rotation);
+  canvas.setTextWrap(false);      // a tag past the right edge mid-slide would land on the left one
   labelFont.begin(canvas);
   labelFont.setFont(u8g2_font_wqy12_t_gb2312);   // resets font mode, so set it first
   labelFont.setFontMode(1);
@@ -772,6 +843,7 @@ void loop() {
   pollSerial();
   tickSessions();
   tickPaging();
+  tickSettingsSave();
   unsigned long now = millis();
   unsigned long frameMs = slideTo >= 0 ? SLIDE_FRAME_MS : FRAME_MS;
   if (canvas.getBuffer() && now - lastFrameMs >= frameMs) {

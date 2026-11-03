@@ -1,0 +1,66 @@
+{
+  "themes": [
+    {
+      "id": 1,
+      "key": "classic",
+      "name": "经典",
+      "tagline": "奶油色桌面，小队的原始模样",
+      "min_fw": 1,
+      "glow": "#da7756",
+      "scenes": {
+        "squad": {
+          "file": "theme-1/squad.png",
+          "frames": 72,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-1/solo.png",
+          "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-1/empty.png",
+          "frames": 1,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 2,
+      "key": "noir",
+      "name": "午夜",
+      "tagline": "深夜霓虹，暗场里只亮状态",
+      "min_fw": 1,
+      "glow": "#38e4ff",
+      "scenes": {
+        "squad": {
+          "file": "theme-2/squad.png",
+          "frames": 72,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-2/solo.png",
+          "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-2/empty.png",
+          "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    }
+  ]
+}

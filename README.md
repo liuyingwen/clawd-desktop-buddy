@@ -169,7 +169,7 @@ codex plugin marketplace add .
 codex plugin add clawd-mood@clawd-mood
 ```
 
-**Codex 默认不执行未信任的 hook**：装完后在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 10 个事件，否则屏幕不会有反应。信任绑定 hook 内容的哈希，hook 变更后需要重新信任。
+**Codex 默认不执行未信任的 hook**：装完后在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 12 个事件，否则屏幕不会有反应。Codex 对整个插件目录算哈希，插件里任何文件变更（包括升级版本）后都要重新信任。
 
 之后任意目录 `codex` 即可。
 
@@ -180,7 +180,7 @@ codex plugin remove clawd-mood@clawd-mood
 codex plugin marketplace remove clawd-mood
 ```
 
-> Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/scripts/hook.py` 等源文件后需要 `codex plugin remove/add` 才生效。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
+> Codex 是把 plugin **拷贝**到 `~/.codex/plugins/cache/`，改了 `plugin/` 下的文件后需要 `codex plugin remove/add` 才生效，之后还要在 `/hooks` 重新信任。Claude Code 的 `--plugin-dir` 是 live path，无此问题。
 
 #### OpenCode（≥ 2.0）
 
@@ -253,7 +253,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据（目前支持 Claude Code 和 Codex），读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
 
-不同工具显示不同的小人，造型来自各自的 logo：Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫。同一工具的多个会话长得一样，靠标题区分。
+不同工具显示不同的小人，造型来自各自的 logo。下面的造型和颜色是默认主题「经典」的，换主题后状态含义不变，外观以主题为准（见[配置页](#5-配置页换主题调方向和亮度)）。Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫。同一工具的多个会话长得一样，靠标题区分。
 
 | 状态     | 地砖色 / 右上角图标 | 触发                                                                  |
 | -------- | ------------- | --------------------------------------------------------------------- |
@@ -321,6 +321,61 @@ Get-Content $env:TEMP\clawd-mood-daemon.log -Wait
 
 每次事件应新增一行 `-> {"state":"...","event":"...","tool":"...","session":"...","name":"...","src":"CC"}`，有标题时还带 `title`。
 
+### 5. 配置页：换主题、调方向和亮度
+
+在仓库根目录运行，会打开浏览器：
+
+```bash
+uv run page/serve.py
+
+# 只打印地址，不打开浏览器
+uv run page/serve.py --no-open
+```
+
+```powershell
+# Windows PowerShell（untested）
+uv run page\serve.py
+```
+
+页面只监听本机，地址里带一次性令牌。10 分钟没有操作会自动关闭（最长 1 小时），重新运行上面的命令即可。daemon 没在跑时，页面发设置前会把它拉起来。
+
+| 主题 | 风格 |
+| ---- | ---- |
+| 1 经典（默认） | 奶油色桌面，小队的原始模样 |
+| 2 午夜 | 深夜霓虹，暗场里只亮状态 |
+
+- **选主题**：点卡带只切换页面上的预览，预览是真实固件画出来的帧。按「应用到屏幕」才发给设备，而且只发改过的项。
+- **屏幕方向**：0° / 90° / 180° / 270°，默认 90°（`rotation` 1，当前面板的安装方向）。
+- **背光亮度**：10–100，默认 100。
+- **串口设备**：多块板子时在这里选，存到 `~/.clawd-mood/config.json`，保存后会重启 daemon。优先级低于环境变量 `CLAWD_MOOD_PORT`。Windows 上要手动重启 daemon 才生效。
+- **发送测试小人**：屏幕上出现一个「测试小人」，工作、完成，几秒后离开。
+- **诊断信息**：出问题时看这里，能看到 daemon、串口、日志。
+
+链路是单向的，设备不回话，所以页面只能告诉你「已发送，请看屏幕确认」，表示 daemon 已把这行写进串口。屏幕上提示 3 秒（比如 `主题 午夜`）才算生效。看到「已保存，设备未连接，未发送」时，插上设备再按一次「应用到屏幕」。设置存在板子的闪存里。
+
+不开页面也能设置，键都可选：
+
+```bash
+printf '{"cfg":{"theme":2,"rotation":1,"brightness":60}}\n' | nc 127.0.0.1 $(cat ${TMPDIR:-/tmp}/clawd-mood.port)
+```
+
+> ⚠️ **主题和设置还没在真实硬件上验证过。** 已验证的是固件编译、主机上的帧输出和假串口上的完整链路；屏幕实际显示、调光、断电保存、午夜主题的帧率都没上板测过。试过的话请开 issue 反馈结果。
+
+想自己加主题，见[设计说明书](docs/superpowers/specs/2026-11-02-config-page-themes-design.md#加一个主题)。
+
+### 6. 从旧版本更新到 0.3.0
+
+- **所有人：重新烧一次固件才有主题**，命令见[编译 + 上传](#5-编译--上传)。旧固件会忽略设置行，状态显示不受影响，但页面仍会显示「已发送」。烧完后在配置页按「重新发送全部设置」。
+- **Codex：要重新批准 hook。** Codex 对整个插件目录算哈希，0.3.0 改了插件文件。重装后在 codex 里运行 `/hooks`，重新信任 12 个事件，否则屏幕没反应：
+
+  ```bash
+  codex plugin remove clawd-mood@clawd-mood
+  codex plugin add clawd-mood@clawd-mood
+  ```
+
+- **DeepSeek Harness 原生插件**：`.tgz` 里带着旧的 `daemon.py`，要重新 `npm run pack:tarball` 并安装新的包。
+- **正在跑的 daemon** 还是旧版本，`pkill -f scripts/daemon.py` 后下次会话启动时会拉起新的（Windows 见[卸载](#卸载)里的停止命令）。
+
 ---
 
 ## 卸载
@@ -367,15 +422,17 @@ Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
 ## 故障排除
 
 - **屏幕不亮**：检查接线，特别是 VCC 是不是接到 3V3 而不是 5V
-- **屏幕方向不对**：改 `firmware/clawd_mood/clawd_mood.ino` 里 `tft.setRotation(1)` 换成 0/2/3 重烧
+- **屏幕方向不对**：在[配置页](#5-配置页换主题调方向和亮度)改「屏幕方向」。要改默认值，改 `firmware/clawd_mood/clawd_mood.ino` 里的 `DEFAULT_ROTATION`（0/2/3）重烧
+- **配置页显示已发送，屏幕没变化**：固件可能还是旧的，重烧一次（见[更新到 0.3.0](#6-从旧版本更新到-030)），再按「重新发送全部设置」。新固件在设置确实变化时会提示 3 秒，值没变不提示
+- **拔掉 USB 后屏幕不更新**：daemon 不会退出，拔掉期间的消息直接丢弃。插回后下一条消息触发重连（最多每 3 秒试一次），daemon 日志里会有 `is back`。启动 daemon 时没插设备才会退出
 - **`No ESP32-like USB CDC device found`**：板子没插好，或者 USB 数据线只能充电不能传输；Linux 检查是否加入 `dialout` 组；Windows 检查设备管理器有无未识别设备
-- **多个 ESP32 同时插**：用环境变量指定端口
+- **多个 ESP32 同时插**：daemon 按「环境变量 → 配置页保存的串口 → 自动扫描」选端口，扫描时优先 ESP32 原生 USB，剩多个时取排序后的第一个并在日志里警告。可以在配置页选，或用环境变量指定端口
   - mac/linux: `CLAWD_MOOD_PORT=/dev/cu.usbmodemXXX ./plugin/scripts/daemon.py`
   - Windows PowerShell: `$env:CLAWD_MOOD_PORT='COM7'; uv run plugin\scripts\daemon.py`
 - **默认 TCP 端口 48756 被占**：daemon 会自动回退到 OS 分配的空闲端口（写进 portfile），hook 读 portfile 自动跟随。要强制指定：`CLAWD_MOOD_PORT_TCP=49000 ./plugin/scripts/daemon.py`（显式指定时冲突会直接报错退出）
 - **Codex 不识别插件**：检查 `codex plugin marketplace list` 看本地 marketplace 是否注册；若 marketplace 路径变了，先 `codex plugin marketplace remove clawd-mood` 再 `add` 一次
 - **Codex 改完 hook.py 没生效**：codex 是拷贝缓存，要 `codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood` 刷新
-- **Codex 里屏幕完全没反应**：hook 还没被信任，在 codex 里运行 `/hooks` 审阅并信任
+- **Codex 里屏幕完全没反应**：hook 还没被信任，或更新插件后信任失效了，在 codex 里运行 `/hooks` 审阅并信任
 - **OpenCode 屏幕没反应**：确认版本 ≥ 2.0、软链有效，运行 `opencode reload` 或重启后台服务让插件重新加载
 - **DeepSeek Harness 屏幕没反应**：会话要提交过 prompt 才上屏。原生插件：确认装在了正在用的 profile（桌面版是 `desktop`）。桥接：daemon 不会被它拉起，先手动启动；再确认 profile 里装了桥接包、`configPath` 是绝对路径（路径错误时桥接只打警告，不注册 hook）
 

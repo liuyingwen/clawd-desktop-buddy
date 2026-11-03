@@ -320,4 +320,5 @@ echo '{"state":"working"}' > /tmp/clawd-mood.fifo
 - 多设备支持
 - WiFi 网页备份控制
 - launchd 自启
-- 自定义表情主题
+
+自定义主题已不在此列，见 [配置页与主题](2026-11-02-config-page-themes-design.md)。

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>CLAWD-MOOD 桌面小队</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="page.css">
+  <script src="page.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="wordmark">CLAWD-MOOD</span>
+    <span class="caption">DESK UNIT CONTROLLER // 桌面小队</span>
+  </div>
+  <ul class="leds" aria-label="链路状态">
+    <li class="led" id="led-plugin"><i></i><span>插件</span></li>
+    <li class="led" id="led-daemon"><i></i><span>后台</span></li>
+    <li class="led" id="led-usb"><i></i><span>USB</span></li>
+    <li class="led led--dim" id="led-screen" title="本页读不到设备屏幕，请以眼睛看到的为准"><i></i><span>屏幕</span></li>
+  </ul>
+  <button type="button" class="key key--small" id="open-diag">诊断信息</button>
+</header>
+
+<main>
+
+<section class="stage" aria-labelledby="headline">
+  <div class="stage__backdrop" aria-hidden="true">
+    <div class="pixelgrid"></div>
+    <div class="dial dial--outer"></div>
+    <div class="dial dial--mid"></div>
+    <div class="dial dial--inner"></div>
+    <div class="scope scope--left"></div>
+    <div class="scope scope--right"></div>
+    <div class="vu vu--left"></div>
+    <div class="vu vu--right"></div>
+    <div class="beam beam--left"></div>
+    <div class="beam beam--right"></div>
+    <div class="beam beam--centre"></div>
+    <div class="lamp lamp--left"></div>
+    <div class="lamp lamp--centre"></div>
+    <div class="lamp lamp--right"></div>
+  </div>
+
+  <h1 class="marquee" id="headline">
+    <img src="assets/headline.png" width="143" height="11" alt="">
+    <span class="sr-only">选一套样式，让小队换衣服</span>
+  </h1>
+
+  <div class="plaque plaque--left">
+    <p class="subline">样式会直接发送到设备，屏幕上立刻换装。</p>
+    <div class="actions">
+      <button type="button" class="key key--primary" id="apply">应用到屏幕</button>
+      <button type="button" class="key" id="test">发送测试小人</button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <p class="status-detail" id="status-detail"></p>
+    <a class="hint-link" href="#firmware-hint">屏幕没变化？</a>
+  </div>
+
+  <div class="unit-wrap">
+    <div class="halo" aria-hidden="true"></div>
+    <div class="unit">
+      <div class="unit__grip unit__grip--left" aria-hidden="true"></div>
+      <div class="unit__grip unit__grip--right" aria-hidden="true"></div>
+      <div class="unit__head" aria-hidden="true">
+        <span class="screw"></span>
+        <span class="unit__tag">CLAWD//MOOD</span>
+        <span class="unit__pips"><i></i><i></i><i></i></span>
+        <span class="screw"></span>
+      </div>
+      <div class="bezel">
+        <div class="screen" id="screen">
+          <canvas id="stage-canvas" width="240" height="240" role="img" aria-label="固件真实画面预览"></canvas>
+          <div class="screen__scan" aria-hidden="true"></div>
+          <div class="screen__glass" aria-hidden="true"></div>
+          <div class="screen__flash" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="unit__foot" aria-hidden="true">
+        <span class="screw"></span>
+        <span class="unit__spec">ESP32-C3 · ST7789 1.54&quot; · 240×240</span>
+        <span class="unit__vents"></span>
+        <span class="screw"></span>
+      </div>
+    </div>
+    <div class="unit__feet" aria-hidden="true"></div>
+  </div>
+
+  <aside class="plaque plaque--right" aria-label="当前预览">
+    <h2 class="plaque__title">PREVIEW // 当前预览</h2>
+    <dl class="readout">
+      <div><dt>样式</dt><dd id="read-theme">经典</dd></div>
+      <div><dt>方向</dt><dd id="read-rotation">90°</dd></div>
+      <div><dt>亮度</dt><dd id="read-brightness">100%</dd></div>
+      <div><dt>待发送</dt><dd id="read-pending">0 项</dd></div>
+    </dl>
+    <p class="plaque__note">这里是固件真实画面的预览，设备上的样子请看实物屏幕。</p>
+  </aside>
+
+  <div class="desk" aria-hidden="true">
+    <div class="desk__lines"></div>
+    <div class="desk__pool"></div>
+    <div class="reflection">
+      <div class="reflection__body">
+        <canvas id="reflect-canvas" width="240" height="240"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="dock-section" aria-labelledby="dock-title">
+  <h2 class="section-title" id="dock-title">主题卡带 // CARTRIDGES</h2>
+  <div class="dock">
+    <div class="dock__rail" aria-hidden="true"></div>
+    <div class="dock__cards">
+      <div class="dock__real" id="cartridges" role="radiogroup" aria-labelledby="dock-title"></div>
+      <div class="dock__soon">
+        <div class="cart cart--soon cart--term" aria-disabled="true">
+          <div class="cart__window" aria-hidden="true">
+            <div class="art-term"><span>&gt; squad --status</span><span>&gt; 00 err</span><span>&gt; _</span></div>
+          </div>
+          <div class="cart__label"><span class="cart__no">03</span><span class="cart__name">荧光终端</span></div>
+          <span class="cart__tag">开发中</span>
+        </div>
+        <div class="cart cart--soon cart--arcade" aria-disabled="true">
+          <div class="cart__window" aria-hidden="true">
+            <div class="art-arcade"><i class="invader"></i><i class="invader invader--b"></i><i class="ship"></i></div>
+          </div>
+          <div class="cart__label"><span class="cart__no">04</span><span class="cart__name">街机</span></div>
+          <span class="cart__tag">开发中</span>
+        </div>
+        <div class="cart cart--more">
+          <span class="cart__plus" aria-hidden="true">+</span>
+          <span class="cart__morelabel">更多样式开发中</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="bus" aria-labelledby="bus-title">
+  <h2 class="section-title" id="bus-title">硬件配置面板 // DEVICE BUS</h2>
+  <div class="racks">
+
+    <fieldset class="rack rack--rotation">
+      <legend class="rack__label"><span class="rack__id">M1</span>屏幕方向</legend>
+      <div class="rack__body">
+        <div class="glyph" aria-hidden="true"><div class="glyph__face" id="rotation-glyph"></div></div>
+        <div class="segments">
+          <label class="segment"><input type="radio" name="rotation" value="0"><span>0°</span></label>
+          <label class="segment"><input type="radio" name="rotation" value="1" checked><span>90°</span></label>
+          <label class="segment"><input type="radio" name="rotation" value="2"><span>180°</span></label>
+          <label class="segment"><input type="radio" name="rotation" value="3"><span>270°</span></label>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="rack rack--brightness">
+      <div class="rack__label"><span class="rack__id">M2</span><label for="brightness">背光亮度</label></div>
+      <div class="rack__body">
+        <div class="numerals" aria-hidden="true">
+          <span class="numerals__ghost">888</span>
+          <output class="numerals__value" id="brightness-value">100</output>
+          <span class="numerals__unit">%</span>
+        </div>
+        <input class="fader" type="range" id="brightness" min="10" max="100" step="5" value="100">
+        <div class="fader__scale" aria-hidden="true"><span>10</span><span>55</span><span>100</span></div>
+      </div>
+    </div>
+
+    <div class="rack rack--serial">
+      <div class="rack__label"><span class="rack__id">M3</span><label for="serial">串口设备</label></div>
+      <div class="rack__body">
+        <div class="selectbox">
+          <select id="serial"><option value="">自动选择</option></select>
+        </div>
+        <pre class="portinfo" id="port-info"></pre>
+        <div class="serial-row">
+          <button type="button" class="key key--small" id="save-serial">保存串口</button>
+          <span class="serial-result" id="serial-result" role="status" aria-live="polite"></span>
+        </div>
+        <p class="rack__note">保存后会重启后台，由本页启动的后台会用这个端口。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="legend" aria-labelledby="legend-title">
+  <h2 class="section-title" id="legend-title">状态图例 // CLI AGENT REALTIME STATUS LEDS</h2>
+  <ul class="chips" id="chips"></ul>
+</section>
+
+<section class="hint" id="firmware-hint" aria-labelledby="hint-title">
+  <h2 class="hint__title" id="hint-title">屏幕没变化？可能需要更新固件</h2>
+  <p>旧固件会忽略样式设置，但测试小人仍然能显示。在仓库目录运行：</p>
+  <pre class="command"><code id="flash-command"></code></pre>
+  <div class="hint__row">
+    <button type="button" class="key key--small" id="resend">重新发送全部设置</button>
+    <span>更新固件后用它把样式、方向、亮度再发一次。</span>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <span>本页 10 分钟无操作后自动关闭</span>
+  <span class="footer__left" id="time-left"></span>
+</footer>
+
+<dialog class="drawer" id="drawer" aria-labelledby="drawer-title">
+  <div class="drawer__head">
+    <h2 id="drawer-title">诊断信息</h2>
+    <button type="button" class="key key--small" id="close-diag">关闭</button>
+  </div>
+  <p class="drawer__break" id="diag-break"></p>
+  <div id="diag-body"></div>
+</dialog>
+
+<div class="closed" id="closed" hidden>
+  <div class="closed__panel" role="alertdialog" aria-labelledby="closed-title" aria-describedby="closed-text">
+    <h2 id="closed-title">本页已关闭</h2>
+    <p id="closed-text"></p>
+    <pre class="command"><code>uv run page/serve.py</code></pre>
+  </div>
+</div>
+
+<template id="cart-template">
+  <label class="cart cart--real">
+    <input type="radio" name="theme">
+    <span class="cart__window"><canvas width="240" height="240"></canvas></span>
+    <span class="cart__label">
+      <span class="cart__no"></span>
+      <span class="cart__name"></span>
+      <span class="cart__tagline"></span>
+    </span>
+    <span class="cart__grip" aria-hidden="true"></span>
+    <span class="bracket bracket--tl" aria-hidden="true"></span>
+    <span class="bracket bracket--tr" aria-hidden="true"></span>
+    <span class="bracket bracket--bl" aria-hidden="true"></span>
+    <span class="bracket bracket--br" aria-hidden="true"></span>
+  </label>
+</template>
+
+</body>
+</html>
