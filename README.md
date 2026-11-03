@@ -23,13 +23,24 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Code
 
 ## 安装
 
-需要一块 ESP32-C3 和一块 ST7789 1.54" 240×240 SPI 屏，按下表接线后用数据线插到电脑上。**VCC 接 3V3，接 5V 会烧屏。**
+需要一块 ESP32-C3 和一块 ST7789 1.54" 240×240 SPI 屏，按下表接线后用数据线插到电脑上。
 
-| 屏幕 | VCC | GND | SDA | SCL | RES | DC | CS | BL |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ESP32-C3 | 3V3 | GND | GPIO 10 | GPIO 8 | GPIO 2 | GPIO 1 | GPIO 4 | GPIO 3 |
+### 接线（VCC 接 3.3V，**不要接 5V**）
 
-然后装上 clawd-mood 技能（需要 Node.js ≥ 22.20，会问你装给哪些 agent）：
+| Display | ESP32-C3 |
+| ------- | -------- |
+| VCC     | 3V3      |
+| GND     | GND      |
+| SDA     | GPIO 10  |
+| SCL     | GPIO 8   |
+| RES     | GPIO 2   |
+| DC      | GPIO 1   |
+| CS      | GPIO 4   |
+| BL      | GPIO 3   |
+
+### 让 agent 安装
+
+先装上 clawd-mood 技能（需要 Node.js ≥ 22.20，会问你装给哪些 agent）：
 
 ```bash
 npx skills add liuyingwen/clawd-desktop-buddy -g

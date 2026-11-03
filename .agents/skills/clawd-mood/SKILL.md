@@ -47,9 +47,16 @@ arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Libra
 
 你看不到硬件，问用户屏幕是否已按下表接好并插上 USB。没接就把表给用户，并强调 **VCC 接 3V3，接 5V 会烧屏**：
 
-| 屏幕 | VCC | GND | SDA | SCL | RES | DC | CS | BL |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ESP32-C3 | 3V3 | GND | GPIO 10 | GPIO 8 | GPIO 2 | GPIO 1 | GPIO 4 | GPIO 3 |
+| Display | ESP32-C3 |
+| ------- | -------- |
+| VCC     | 3V3      |
+| GND     | GND      |
+| SDA     | GPIO 10  |
+| SCL     | GPIO 8   |
+| RES     | GPIO 2   |
+| DC      | GPIO 1   |
+| CS      | GPIO 4   |
+| BL      | GPIO 3   |
 
 ### 4. 烧固件
 
