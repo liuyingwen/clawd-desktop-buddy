@@ -1,0 +1,94 @@
+# Builds the firmware and publishes it as a GitHub Release whenever firmware/ changes on main.
+# The tag is fw-<first 7 characters of the last commit that touched firmware/>, so any checkout can
+# download the firmware that matches it (see .agents/skills/clawd-mood/SKILL.md).
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firmware-release
+  cancel-in-progress: false
+
+env:
+  # The versions the firmware was tested with on hardware. Bump them together, after testing.
+  ARDUINO_CLI: "1.5.1"
+  ESP32_CORE: "3.3.10"
+  ESP32_INDEX: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  FQBN: esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600
+  ASSET: clawd-mood-esp32c3.bin
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the tag comes from the history of firmware/, the notes from earlier tags
+
+      - name: Install arduino-cli
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://downloads.arduino.cc/arduino-cli/arduino-cli_${ARDUINO_CLI}_Linux_64bit.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" arduino-cli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install the ESP32 core and libraries
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install "esp32:esp32@$ESP32_CORE" --additional-urls "$ESP32_INDEX"
+          arduino-cli lib install --no-deps \
+            "Adafruit GFX Library@1.12.6" \
+            "Adafruit BusIO@1.17.4" \
+            "Adafruit ST7735 and ST7789 Library@1.11.0" \
+            "ArduinoJson@7.4.3" \
+            "U8g2_for_Adafruit_GFX@1.8.0"
+
+      - name: Compile
+        run: arduino-cli compile --fqbn "$FQBN" --output-dir build firmware/clawd_mood
+
+      # The merged image holds bootloader, partition table and app, padded to the whole 4 MB flash,
+      # so it is written at 0x0. It also erases the settings the board saved (NVS).
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git log -1 --format=%H -- firmware/)
+          tag="fw-${sha:0:7}"
+          cp build/clawd_mood.ino.merged.bin "$ASSET"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # A rerun, or only this workflow changed: same firmware source, rebuilt
+            gh release upload "$tag" "$ASSET" --clobber
+            exit 0
+          fi
+
+          prev=$(git describe --tags --abbrev=0 --match 'fw-*' "$sha^" 2>/dev/null || true)
+          {
+            if [ -n "$prev" ]; then
+              echo "自 \`$prev\` 以来的固件改动："
+              echo
+              git log --format='- %s' "$prev..$sha" -- firmware/
+            else
+              echo "首个预编译固件，对应提交 \`${sha:0:7}\`。"
+            fi
+            echo
+            echo "烧录方法见 [README](https://github.com/${GITHUB_REPOSITORY}#手动安装)。\`<串口>\` 换成板子的串口："
+            echo
+            echo '```bash'
+            echo "uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 $ASSET"
+            echo '```'
+            echo
+            echo "烧录会清掉板子上保存的主题、方向和亮度，烧完在仓库目录运行 \`uv run page/serve.py --resend\` 恢复。"
+          } > notes.md
+
+          gh release create "$tag" "$ASSET" --target "$sha" --latest \
+            --title "固件 $(git log -1 --format=%cs "$sha") · ${sha:0:7}" --notes-file notes.md
