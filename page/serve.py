@@ -53,7 +53,7 @@ MAX_BODY_BYTES = 4096        # bodies must be under this
 MAX_LINE_BYTES = 319         # the firmware's LINE_MAX minus the newline
 DAEMON_START_WAIT_S = 6.0
 DAEMON_STOP_WAIT_S = 5.0
-SEND_EVIDENCE_WAIT_S = 2.5   # reopening a replugged port blocks the daemon for about 1.5 s
+SEND_EVIDENCE_WAIT_S = 5.0   # reopening a replugged port blocks the daemon for about 3.5 s
 TEST_DONE_AFTER_S = 2.0
 TEST_END_AFTER_S = 3.0
 LOG_TAIL_BYTES = 64 * 1024
@@ -242,7 +242,14 @@ EXPLAIN = {
     "send_failed": "第一处断点：后台。连不上后台的 TCP 端口。",
     "old_stuck": "第一处断点：后台。旧的后台进程没有退出，新设置没有用上。",
     "old_unknown": "第一处断点：后台。找不到旧的后台进程，没法重启它，请手动重启。",
+    "not_daemon": "第一处断点：后台。端口文件指向的进程不是 clawd-mood 后台，可能是残留的端口文件。",
 }
+
+# The script itself, wherever the plugin was copied to, not any file whose name ends in daemon.py.
+# Strict form for signalling. The loose form also accepts a daemon started by hand from inside
+# plugin/scripts (argv "daemon.py"); it only decides whether a send counts, never what gets killed.
+DAEMON_COMMAND = re.compile(r"(^|[\s/])scripts/daemon\.py(\s|$)")
+DAEMON_COMMAND_LOOSE = re.compile(r"(^|[\s/])daemon\.py(\s|$)")
 
 
 class Daemon:
@@ -333,26 +340,30 @@ class Daemon:
                 output = read_log_from(offset)
                 if f"-> {line}" in output:
                     return True, None, started
-                if "!! serial error" in output:
+                # A write error is followed by one reopen, which succeeds when the board is back
+                if "!! serial error" in output and not device_expected(serial_candidates(), read_config()["serial_port"]):
                     return False, "device_gone", started
                 time.sleep(0.05)
             if probe_daemon() is None:
                 return False, "send_failed", started
-            # Nothing logged: a dropped line, or a daemon started by hand that logs elsewhere
+            # Nothing logged: a dropped line, or a daemon started by hand that logs elsewhere.
+            # A stale portfile can also point at some other program, which would take any line.
+            if self.find_pids(port, DAEMON_COMMAND_LOOSE) == []:
+                return False, "not_daemon", started
             candidates = serial_candidates()
             if serial_link_down() or not device_expected(candidates, read_config()["serial_port"]):
                 return False, "device_gone", started
             return True, None, started
 
-    def find_pids(self, port: int) -> list[int]:
-        """The process listening on the daemon's port, only if it really is daemon.py.
+    def find_pids(self, port: int, pattern: re.Pattern = DAEMON_COMMAND) -> list[int] | None:
+        """The process listening on the daemon's port, only if its command line matches pattern.
 
         Asked by port on purpose: matching on the command line could hit a daemon that belongs to
-        another temp dir. No lsof means no restart, and the page says so.
+        another temp dir. None means no lsof to ask: no restart, and the page says so.
         """
         lsof = shutil.which("lsof") or next((p for p in ("/usr/sbin/lsof", "/usr/bin/lsof") if os.path.exists(p)), None)
         if lsof is None:
-            return []
+            return None
         confirmed = []
         try:
             out = subprocess.run([lsof, "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
@@ -360,7 +371,7 @@ class Daemon:
             for pid in (int(p) for p in out.split()):
                 command = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
                                          capture_output=True, text=True, timeout=5).stdout
-                if "daemon.py" in command:
+                if pattern.search(command.strip()):
                     confirmed.append(pid)
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             log(f"could not look up the daemon's process: {e}")
@@ -470,9 +481,19 @@ def serial_candidates() -> list[dict]:
     return found
 
 
+def env_port_present(candidates: list[dict]) -> bool:
+    """CLAWD_MOOD_PORT is used as given, so it only counts when that port exists."""
+    value = os.environ.get("CLAWD_MOOD_PORT")
+    if not value:
+        return False
+    if sys.platform == "win32":
+        return any(c["device"].upper() == value.upper() for c in candidates)
+    return os.path.exists(value)
+
+
 def device_expected(candidates: list[dict], configured: str | None) -> bool:
     """Would daemon.py's detect_port find something: env override, the saved port, or a scan."""
-    return bool(os.environ.get("CLAWD_MOOD_PORT")) or any(
+    return env_port_present(candidates) or any(
         c["likely"] or c["device"] == configured for c in candidates)
 
 
@@ -483,7 +504,7 @@ def first_break(uv_path, daemon_port, usb_ok, link_down) -> dict | None:
     if not usb_ok or (daemon_port is not None and link_down):
         return {"link": "usb", "explain": "第一处断点：USB。没有找到设备，插上 ESP32-C3，或在串口设备里指定端口。"}
     if daemon_port is None:
-        return {"link": "daemon", "explain": "第一处断点：后台没在运行。按下应用到屏幕时会尝试启动一次。"}
+        return {"link": "daemon", "explain": "第一处断点：后台没在运行。有改动时按「应用到屏幕」，或按「发送测试小人」，会尝试启动一次。"}
     return None
 
 
@@ -664,11 +685,13 @@ class App:
         finally:
             self.test_lock.release()
 
-    @staticmethod
-    def send_test_line(obj: dict) -> None:
-        port = probe_daemon()
+    def send_test_line(self, obj: dict) -> None:
+        """Under the daemon lock, so a restart from 保存串口 cannot fall between probe and send."""
         line = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
-        if port is None or not send_line(port, line):
+        with self.daemon.lock:
+            port = probe_daemon()
+            sent = port is not None and send_line(port, line)
+        if not sent:
             log(f"test creature line not sent: {line}")  # the firmware expires it after 30 minutes
 
     @staticmethod
@@ -876,6 +899,13 @@ def main() -> None:
     if not args.no_open:
         webbrowser.open(url)
 
+    def interrupt(*_):
+        raise KeyboardInterrupt
+
+    # Closing the terminal or a plain kill takes the same way out as Ctrl-C, which ends the test creature
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), interrupt)
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:

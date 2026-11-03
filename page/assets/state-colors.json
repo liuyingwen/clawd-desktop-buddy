@@ -1,8 +1,0 @@
-{
-  "_source": "Palette.state of each theme, as printed by tools/preview harness --themes, RGB565 expanded to 8 bits. Order follows the firmware's Mood enum.",
-  "order": ["idle", "thinking", "working", "waiting", "done", "error", "sleeping"],
-  "themes": {
-    "1": ["#949594", "#296df6", "#18aa41", "#ffce00", "#ffffff", "#e61c18", "#41444a"],
-    "2": ["#9499c5", "#39e6ff", "#7bff62", "#ffc629", "#eeeeff", "#ff4052", "#7b7db4"]
-  }
-}

@@ -51,14 +51,14 @@
   </h1>
 
   <div class="plaque plaque--left">
-    <p class="subline">样式会直接发送到设备，屏幕上立刻换装。</p>
+    <p class="subline">先在这里预览，按「应用到屏幕」才会发送，结果请看实物屏幕确认。</p>
     <div class="actions">
       <button type="button" class="key key--primary" id="apply">应用到屏幕</button>
       <button type="button" class="key" id="test">发送测试小人</button>
     </div>
     <p class="status" id="status" role="status" aria-live="polite"></p>
     <p class="status-detail" id="status-detail"></p>
-    <a class="hint-link" href="#firmware-hint">屏幕没变化？</a>
+    <a class="hint-link" href="#firmware-hint">屏幕没变化，或样式不对？</a>
   </div>
 
   <div class="unit-wrap">
@@ -93,7 +93,7 @@
   <aside class="plaque plaque--right" aria-label="当前预览">
     <h2 class="plaque__title">PREVIEW // 当前预览</h2>
     <dl class="readout">
-      <div><dt>样式</dt><dd id="read-theme">经典</dd></div>
+      <div><dt>样式</dt><dd id="read-theme"></dd></div>
       <div><dt>方向</dt><dd id="read-rotation">90°</dd></div>
       <div><dt>亮度</dt><dd id="read-brightness">100%</dd></div>
       <div><dt>待发送</dt><dd id="read-pending">0 项</dd></div>
@@ -116,30 +116,15 @@
   <h2 class="section-title" id="dock-title">主题卡带 // CARTRIDGES</h2>
   <div class="dock">
     <div class="dock__rail" aria-hidden="true"></div>
-    <div class="dock__cards">
-      <div class="dock__real" id="cartridges" role="radiogroup" aria-labelledby="dock-title"></div>
-      <div class="dock__soon">
-        <div class="cart cart--soon cart--term" aria-disabled="true">
-          <div class="cart__window" aria-hidden="true">
-            <div class="art-term"><span>&gt; squad --status</span><span>&gt; 00 err</span><span>&gt; _</span></div>
-          </div>
-          <div class="cart__label"><span class="cart__no">03</span><span class="cart__name">荧光终端</span></div>
-          <span class="cart__tag">开发中</span>
-        </div>
-        <div class="cart cart--soon cart--arcade" aria-disabled="true">
-          <div class="cart__window" aria-hidden="true">
-            <div class="art-arcade"><i class="invader"></i><i class="invader invader--b"></i><i class="ship"></i></div>
-          </div>
-          <div class="cart__label"><span class="cart__no">04</span><span class="cart__name">街机</span></div>
-          <span class="cart__tag">开发中</span>
-        </div>
-        <div class="cart cart--more">
-          <span class="cart__plus" aria-hidden="true">+</span>
-          <span class="cart__morelabel">更多样式开发中</span>
-        </div>
+    <!-- Cartridges come from previews/manifest.json and go in before the last tile -->
+    <div class="dock__cards" id="cartridges" role="radiogroup" aria-labelledby="dock-title">
+      <div class="cart cart--more" id="cart-more" aria-hidden="true">
+        <span class="cart__plus">+</span>
+        <span class="cart__morelabel"><span>更多样式</span><span>开发中</span></span>
       </div>
     </div>
   </div>
+  <p class="sr-only">更多样式开发中</p>
 </section>
 
 <section class="bus" aria-labelledby="bus-title">
@@ -196,8 +181,9 @@
 </section>
 
 <section class="hint" id="firmware-hint" aria-labelledby="hint-title">
-  <h2 class="hint__title" id="hint-title">屏幕没变化？可能需要更新固件</h2>
-  <p>旧固件会忽略样式设置，但测试小人仍然能显示。在仓库目录运行：</p>
+  <h2 class="hint__title" id="hint-title">屏幕没变化，或样式不对？可能需要更新固件</h2>
+  <p id="fw-themes" hidden></p>
+  <p>更早的固件会忽略所有样式设置，但测试小人仍然能显示。在仓库目录运行：</p>
   <pre class="command"><code id="flash-command"></code></pre>
   <div class="hint__row">
     <button type="button" class="key key--small" id="resend">重新发送全部设置</button>
@@ -237,6 +223,7 @@
       <span class="cart__no"></span>
       <span class="cart__name"></span>
       <span class="cart__tagline"></span>
+      <span class="cart__req" hidden>需新版固件</span>
     </span>
     <span class="cart__grip" aria-hidden="true"></span>
     <span class="bracket bracket--tl" aria-hidden="true"></span>

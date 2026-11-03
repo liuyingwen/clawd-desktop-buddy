@@ -41,6 +41,9 @@ PORTFILE = Path(tempfile.gettempdir()) / "clawd-mood.port"
 ESPRESSIF_VID = 0x303A
 CLIENT_TIMEOUT_S = 0.3  # hooks send right after connecting
 RECONNECT_INTERVAL_S = 3.0
+# Hooks connect while a reopen blocks the loop; a full backlog fails their probe and makes
+# SessionStart start a second daemon.
+LISTEN_BACKLOG = 64
 NO_DEVICE_MESSAGE = (
     "No ESP32-like USB CDC device found. Plug it in or set "
     "CLAWD_MOOD_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
@@ -169,17 +172,26 @@ class SerialLink:
         if self.ser is None and not self._reopen():
             self.dropped += 1
             return
+        if not self._write(line):
+            # An unplug nobody wrote through leaves a dead handle while the board may already
+            # be back, so try once now instead of after the reconnect interval.
+            self.retry_at = 0.0
+            if not (self._reopen() and self._write(line)):
+                self.dropped += 1
+                return
+        print(f"  -> {line}")
+
+    def _write(self, line: str) -> bool:
         try:
             self.ser.write((line + "\n").encode())
             self.ser.flush()
         except Exception as e:  # flush() can raise termios.error, which isn't an OSError
             self._disconnect(e)
-            self.dropped += 1
-            return
-        print(f"  -> {line}")
+            return False
+        return True
 
     def _disconnect(self, reason: Exception) -> None:
-        print(f"  !! serial error: {reason}; dropping messages until it is back", file=sys.stderr)
+        print(f"  !! serial error: {reason}; dropping messages until it reconnects", file=sys.stderr)
         try:
             self.ser.close()
         except Exception:
@@ -188,8 +200,9 @@ class SerialLink:
         self.retry_at = time.monotonic() + RECONNECT_INTERVAL_S
 
     def _reopen(self) -> bool:
-        # Opening takes seconds, but only a port that exists gets that far. Clients don't
-        # wait on us and their messages sit in the TCP backlog, so doing it inline is fine.
+        # Opening takes about 3.5 s, but only a port that exists gets that far. Clients don't
+        # wait on us and their messages sit in the TCP backlog (see LISTEN_BACKLOG), so doing
+        # it inline is fine.
         if time.monotonic() < self.retry_at:
             return False
         try:
@@ -218,7 +231,7 @@ def bind_listen(preferred: int, env_forced: bool) -> tuple[socket.socket, int]:
         if env_forced:
             raise
         s.bind(("127.0.0.1", 0))
-    s.listen(8)
+    s.listen(LISTEN_BACKLOG)
     return s, s.getsockname()[1]
 
 
@@ -244,6 +257,15 @@ def check_singleton() -> None:
         pass  # stale portfile — take over
 
 
+def remove_own_portfile(port: int) -> None:
+    """Only while it still names this daemon: another one may have taken over since."""
+    try:
+        if PORTFILE.read_text().strip() == str(port):
+            PORTFILE.unlink()
+    except OSError:
+        pass
+
+
 def read_lines(conn: socket.socket) -> list[str]:
     """One client's message. The loop is serial, so a silent client must not hold it up."""
     try:
@@ -267,7 +289,7 @@ def main() -> None:
     preferred = int(forced) if forced else DEFAULT_TCP_PORT
     server, actual_port = bind_listen(preferred, forced is not None)
     PORTFILE.write_text(str(actual_port))
-    atexit.register(lambda: PORTFILE.unlink(missing_ok=True))
+    atexit.register(remove_own_portfile, actual_port)
 
     serial_port = detect_port()
     if serial_port is None:

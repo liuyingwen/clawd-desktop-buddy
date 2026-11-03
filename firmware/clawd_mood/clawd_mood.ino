@@ -2,7 +2,8 @@
  * clawd-mood — ESP32-C3 Super Mini + ST7789 1.54" 240x240
  *
  * Desktop squad: every CLI session is a pixel creature with a name and a
- * state. Up to 4 per page (filling the screen), more pages rotate on their own.
+ * state. A theme sets how many share a page (4 by default, filling the
+ * screen); more pages rotate on their own.
  */
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -17,27 +18,16 @@
 #define TFT_RST 2
 #define TFT_BLK 3
 
-#define DISP_W 240
-#define DISP_H 240
-
 #define DONE_REVERT_MS    3000UL           // Done → Idle after 3s
 #define SLEEP_IDLE_MS     (5UL*60*1000)    // 5 minutes without events
 #define SLEEP_WORKING_MS  (15UL*60*1000)   // a long tool call sends nothing while it runs
 #define SESSION_EXPIRE_MS (30UL*60*1000)   // forget sessions that never sent SessionEnd
 
-#define MAX_SESSIONS   12
-#define MAX_FOLLOWERS  12                 // subagents remembered per session
 #define FOLLOWER_LEAVE_MS  1500UL         // celebrates this long after SubagentStop
 #define FOLLOWER_EXPIRE_MS (15UL*60*1000) // same patience as a long tool call
 #define FOLLOWER_PAUSE_MS  (2UL*60*1000)  // no tool running: finished, or it comes back on its next tool
 #define FOLLOWER_DROP_MS   400UL          // falls into line when it appears
-#define PER_PAGE       4
-#define PAGE_ROTATE_MS 5000UL
 #define URGENT_HOLD_MS 10000UL
-#define SLIDE_FRAMES   6
-#define SLIDE_FRAME_MS 50UL
-#define FRAME_MS       100UL
-#define PAGER_H        4
 
 #define LINE_MAX 320
 #define SERIAL_RX_BYTES 4096  // input is only read between frames; the default 256 loses lines
@@ -59,31 +49,7 @@ U8G2_FOR_ADAFRUIT_GFX labelFont;       // Chinese-capable text for session label
 const Theme* const THEMES[] = {THEME_TABLE(THEME_ENTRY)};
 const Theme* T = THEMES[0];
 
-struct Follower {
-  char id[7];
-  Mood mood;
-  bool leaving;
-  bool betweenTools;
-  unsigned long bornMs, moodSinceMs, lastEventMs;
-};
-
-struct Session {
-  char id[9];
-  char name[65];    // working directory, UTF-8
-  char title[65];   // session title, kept once known
-  char src[3];
-  Mood mood;        // what the screen shows: own, or waiting for a follower
-  Mood own;         // the main agent's state
-  unsigned long ownSinceMs;
-  Mood beforeCompact;  // own when compaction began, MOOD_UNKNOWN when not compacting
-  Follower followers[MAX_FOLLOWERS];
-  uint8_t followerCount;
-  uint8_t color;
-  unsigned long lastEventMs;
-  bool quiet;                              // urgent state that shouldn't jump pages
-  unsigned long moodSinceMs;
-};
-
+// Follower and Session live in theme.h: themes read them.
 Session sessions[MAX_SESSIONS];
 uint8_t sessionCount = 0;
 uint8_t nextColor = 0;
@@ -113,7 +79,7 @@ Mood parseMood(const char* s) {
   return MOOD_UNKNOWN;
 }
 
-inline bool isUrgent(Mood m) { return m == MOOD_WAITING || m == MOOD_ERROR; }
+bool isAlerting(const Session& s) { return isUrgent(s.mood) && !s.quiet; }
 
 // ── Session table ───────────────────────────────────────────────
 // Positions are stable: new sessions append, states never reorder.
@@ -261,7 +227,9 @@ Preferences prefs;
 uint8_t rotation = DEFAULT_ROTATION;
 uint8_t brightness = DEFAULT_BRIGHTNESS;
 uint8_t savedTheme, savedRotation, savedBrightness;   // what NVS holds
-bool settingsDirty = false;
+// Keys a cfg changed. Only these are saved, so a value this firmware cannot use stays in NVS.
+enum : uint8_t { DIRTY_THEME = 1, DIRTY_ROTATION = 2, DIRTY_BRIGHTNESS = 4 };
+uint8_t settingsDirty = 0;
 unsigned long settingsChangedMs = 0;
 char toast[64] = "";
 unsigned long toastUntilMs = 0;
@@ -271,6 +239,19 @@ const Theme* findTheme(int id) {
     if (t->id == id) return t;
   }
   return nullptr;
+}
+
+// Every change of T goes through here. A different page size moves to the page holding the first
+// session the screen showed and drops any page change, so no page index outlives its theme.
+void useTheme(const Theme* t, unsigned long now) {
+  if (t->perPage != T->perPage) {
+    uint8_t first = (slideTo >= 0 ? slideTo : currentPage) * T->perPage;
+    currentPage = first / t->perPage;
+    slideTo = -1;
+    lastPageMs = now;
+  }
+  T = t;
+  if (T->ops.enter) T->ops.enter(now);
 }
 
 void setBacklight(uint8_t percent) {
@@ -304,19 +285,22 @@ void loadSettings() {
   prefs.end();
   // An id this firmware lacks (downgrade) draws theme 1 but stays saved, for the next upgrade
   const Theme* t = findTheme(savedTheme);
-  T = t ? t : THEMES[0];
+  useTheme(t ? t : THEMES[0], millis());
   rotation = savedRotation <= 3 ? savedRotation : DEFAULT_ROTATION;
   brightness = constrain(savedBrightness, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
 }
 
 void tickSettingsSave() {
   if (!settingsDirty || millis() - settingsChangedMs < SAVE_DELAY_MS) return;
-  settingsDirty = false;
-  if (T->id == savedTheme && rotation == savedRotation && brightness == savedBrightness) return;
+  bool theme = (settingsDirty & DIRTY_THEME) && T->id != savedTheme;
+  bool rot = (settingsDirty & DIRTY_ROTATION) && rotation != savedRotation;
+  bool bright = (settingsDirty & DIRTY_BRIGHTNESS) && brightness != savedBrightness;
+  settingsDirty = 0;
+  if (!theme && !rot && !bright) return;
   prefs.begin("clawd-mood", false);
-  if (T->id != savedTheme) prefs.putUChar("theme", savedTheme = T->id);
-  if (rotation != savedRotation) prefs.putUChar("rotation", savedRotation = rotation);
-  if (brightness != savedBrightness) prefs.putUChar("brightness", savedBrightness = brightness);
+  if (theme) prefs.putUChar("theme", savedTheme = T->id);
+  if (rot) prefs.putUChar("rotation", savedRotation = rotation);
+  if (bright) prefs.putUChar("brightness", savedBrightness = brightness);
   prefs.end();
 }
 
@@ -328,7 +312,8 @@ void handleCfg(JsonObjectConst cfg) {
     const Theme* t = findTheme(cfg["theme"].as<int>());
     if (!t) t = THEMES[0];
     if (t != T) {
-      T = t;
+      useTheme(t, millis());
+      settingsDirty |= DIRTY_THEME;
       n += snprintf(msg + n, sizeof(msg) - n, "主题 %s  ", T->name);
     }
   }
@@ -337,6 +322,7 @@ void handleCfg(JsonObjectConst cfg) {
     if (r >= 0 && r <= 3 && r != rotation) {
       rotation = r;
       tft.setRotation(rotation);
+      settingsDirty |= DIRTY_ROTATION;
       n += snprintf(msg + n, sizeof(msg) - n, "方向 %d°  ", rotation * 90);
     }
   }
@@ -345,6 +331,7 @@ void handleCfg(JsonObjectConst cfg) {
     if ((uint8_t)b != brightness) {
       brightness = b;
       setBacklight(brightness);
+      settingsDirty |= DIRTY_BRIGHTNESS;
       n += snprintf(msg + n, sizeof(msg) - n, "亮度 %d%%  ", brightness);
     }
   }
@@ -352,7 +339,6 @@ void handleCfg(JsonObjectConst cfg) {
   msg[n - 2] = 0;   // the separator after the last item
   strlcpy(toast, msg, sizeof(toast));
   toastUntilMs = millis() + TOAST_MS;
-  settingsDirty = true;
   settingsChangedMs = millis();
 }
 
@@ -437,7 +423,19 @@ void pollSerial() {
 
 // ── Paging ──────────────────────────────────────────────────────
 
-inline uint8_t pageCount() { return sessionCount ? (sessionCount + PER_PAGE - 1) / PER_PAGE : 1; }
+uint8_t pageCount() { return sessionCount ? (sessionCount + T->perPage - 1) / T->perPage : 1; }
+
+int8_t heldUrgent(unsigned long now) {
+  if (!urgentId[0]) return -1;
+  int8_t i = findSession(urgentId);
+  return i >= 0 && isUrgent(sessions[i].mood) && (long)(urgentUntilMs - now) > 0 ? i : -1;
+}
+
+uint16_t slideProgress(unsigned long now) {
+  if (slideTo < 0) return 0;
+  unsigned long frame = min((now - slideStartMs) / SLIDE_FRAME_MS + 1, (unsigned long)SLIDE_FRAMES);
+  return TRANSITION_ONE * frame / SLIDE_FRAMES;
+}
 
 void startSlide(uint8_t to) {
   slideTo = to;
@@ -461,16 +459,16 @@ void tickPaging() {
     lastPageMs = now;
   }
   if (urgentId[0]) {
-    int8_t i = findSession(urgentId);
-    if (i >= 0 && isUrgent(sessions[i].mood) && (long)(urgentUntilMs - now) > 0) {
-      uint8_t target = i / PER_PAGE;
+    int8_t i = heldUrgent(now);
+    if (i >= 0) {
+      uint8_t target = i / T->perPage;
       if (target != currentPage) startSlide(target);
       lastPageMs = now;
       return;
     }
     urgentId[0] = 0;
   }
-  if (now - lastPageMs > PAGE_ROTATE_MS) startSlide((currentPage + 1) % pages);
+  if (now - lastPageMs > (T->pageMs ? T->pageMs : PAGE_ROTATE_MS)) startSlide((currentPage + 1) % pages);
 }
 
 // ── Drawing ─────────────────────────────────────────────────────
@@ -649,6 +647,26 @@ const uint8_t* iconFor(Mood m, unsigned long now) {
   }
 }
 
+const char* labelOf(const Session& s) { return s.title[0] ? s.title : s.name; }
+
+int16_t fitLabel(char* out, size_t size, const char* text, int16_t maxW) {
+  strlcpy(out, text, size);
+  size_t len = strlen(out);
+  while (len && labelFont.getUTF8Width(out) > maxW) {
+    do { len--; } while (len && (out[len] & 0xC0) == 0x80);
+    out[len] = 0;
+  }
+  return labelFont.getUTF8Width(out);
+}
+
+int16_t drawLabel(const char* text, int16_t x, int16_t baselineY, int16_t maxW, uint16_t col) {
+  char label[sizeof(Session::title)];
+  int16_t w = fitLabel(label, sizeof(label), text, maxW);
+  labelFont.setForegroundColor(col);
+  labelFont.drawUTF8(x, baselineY, label);
+  return w;
+}
+
 void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsigned long now) {
   const Palette& P = T->pal;
   if (T->ops.cellBg) {
@@ -683,15 +701,10 @@ void drawCell(const Session& s, int16_t x, int16_t y, int16_t w, int16_t h, unsi
   }
 
   // Session title (directory until one exists), cut on a UTF-8 boundary to fit
-  char label[65];
-  strlcpy(label, s.title[0] ? s.title : s.name, sizeof(label));
-  size_t len = strlen(label);
-  while (len && labelFont.getUTF8Width(label) > w - 4) {
-    do { len--; } while (len && (label[len] & 0xC0) == 0x80);
-    label[len] = 0;
-  }
+  char label[sizeof(s.title)];
+  int16_t labelW = fitLabel(label, sizeof(label), labelOf(s), w - 4);
   labelFont.setForegroundColor(P.text);
-  labelFont.drawUTF8(x + (w - labelFont.getUTF8Width(label)) / 2, tileY + tileH + 12, label);
+  labelFont.drawUTF8(x + (w - labelW) / 2, tileY + tileH + 12, label);
 
   if (s.src[0]) {
     canvas.setTextSize(1);
@@ -711,8 +724,12 @@ void drawLabelCentered(const char* text, int16_t baselineY, uint16_t col) {
 }
 
 void drawPage(uint8_t page, int16_t ox, int16_t contentH, unsigned long now) {
-  uint8_t first = page * PER_PAGE;
-  uint8_t n = sessionCount > first ? min(sessionCount - first, PER_PAGE) : 0;
+  uint8_t first = page * T->perPage;
+  uint8_t n = sessionCount > first ? min(sessionCount - first, (int)T->perPage) : 0;
+  if (T->ops.page) {
+    T->ops.page(first, n, ox, contentH, now);
+    return;
+  }
   const int16_t half = (DISP_W - 2) / 2, right = half + 2;
   const int16_t halfH = (contentH - 2) / 2, lower = contentH - halfH;
 
@@ -737,18 +754,27 @@ void drawPage(uint8_t page, int16_t ox, int16_t contentH, unsigned long now) {
       drawCell(s[2], ox, lower, half, halfH, now);
       drawCell(s[3], ox + right, lower, half, halfH, now);
       break;
+    default: {   // a theme with more per page: 3 columns up to 6, then 4, rows as needed
+      if (n < 5) break;
+      const int16_t cols = n <= 6 ? 3 : 4, rows = (n + cols - 1) / cols;
+      const int16_t w = (DISP_W - 2 * (cols - 1)) / cols, h = (contentH - 2 * (rows - 1)) / rows;
+      for (uint8_t i = 0; i < n; i++) {
+        drawCell(s[i], ox + (i % cols) * (w + 2), (i / cols) * (h + 2), w, h, now);
+      }
+    }
   }
 }
 
-void drawPager(uint8_t pages, uint8_t active, unsigned long now) {
-  canvas.fillRect(0, DISP_H - PAGER_H, DISP_W, PAGER_H, T->pal.pagerBg);
+// Fills rows [y, y+h); the page blocks sit in the bottom PAGER_H rows
+void drawPager(uint8_t pages, uint8_t active, int16_t y, int16_t h, unsigned long now) {
+  canvas.fillRect(0, y, DISP_W, h, T->pal.pagerBg);
   const int16_t dotW = 16, gap = 6;
   int16_t x = (DISP_W - pages * dotW - (pages - 1) * gap) / 2;
   for (uint8_t p = 0; p < pages; p++, x += dotW + gap) {
     uint16_t col = p == active ? T->pal.pagerOn : T->pal.pagerOff;
     // Pages holding an urgent session blink in that state's colour
-    for (uint8_t i = p * PER_PAGE; i < sessionCount && i < (p + 1) * PER_PAGE; i++) {
-      if (isUrgent(sessions[i].mood) && !sessions[i].quiet && (now / 250) % 2) col = stateColor(sessions[i].mood);
+    for (uint8_t i = p * T->perPage; i < sessionCount && i < (p + 1) * T->perPage; i++) {
+      if (isAlerting(sessions[i]) && (now / 250) % 2) col = stateColor(sessions[i].mood);
     }
     canvas.fillRect(x, DISP_H - PAGER_H, dotW, PAGER_H, col);
   }
@@ -790,7 +816,8 @@ void render() {
 #endif
   unsigned long now = millis();
   uint8_t pages = pageCount();
-  int16_t contentH = pages > 1 ? DISP_H - PAGER_H : DISP_H;
+  int16_t pagerH = T->ops.pagerHeight ? T->ops.pagerHeight(pages) : pages > 1 ? PAGER_H : 0;
+  int16_t contentH = DISP_H - pagerH;
 
   if (sessionCount == 0 && T->ops.idleScreen) {
     T->ops.idleScreen(now);
@@ -799,6 +826,8 @@ void render() {
     strlcpy(none.name, "no session", sizeof(none.name));
     none.mood = MOOD_SLEEPING;
     drawCell(none, 0, 0, DISP_W, DISP_H, now);
+  } else if (slideTo >= 0 && T->ops.transition) {
+    T->ops.transition(currentPage, slideTo, slideProgress(now), contentH, now);
   } else if (slideTo >= 0) {
     uint8_t frame = min((now - slideStartMs) / SLIDE_FRAME_MS + 1, (unsigned long)SLIDE_FRAMES);
     int16_t shift = DISP_W * frame / SLIDE_FRAMES;
@@ -808,10 +837,15 @@ void render() {
     drawPage(currentPage, 0, contentH, now);
   }
   if (T->ops.overlay) T->ops.overlay(now);
-  if (pages > 1) drawPager(pages, slideTo >= 0 ? slideTo : currentPage, now);
+  uint8_t active = slideTo >= 0 ? slideTo : currentPage;
+  if (sessionCount && pagerH > 0) {
+    if (T->ops.pager) T->ops.pager(pages, active, contentH, pagerH, now);
+    else drawPager(pages, active, contentH, pagerH, now);
+  }
   if (toast[0]) {
-    if ((long)(toastUntilMs - now) > 0) drawToast();
-    else toast[0] = 0;
+    if ((long)(toastUntilMs - now) <= 0) toast[0] = 0;
+    else if (T->ops.toast) T->ops.toast(toast, now);
+    else drawToast();
   }
 
 #ifdef CLAWD_PROFILE

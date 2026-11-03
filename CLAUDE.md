@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概要
 
-`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI / OpenCode / pi / WorkBuddy / DeepSeek Harness** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示会话标题或目录名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。外观是编译进固件的主题（经典 / 午夜），方向和亮度也可调，都通过本地配置页 `page/serve.py` 设置，见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
+`clawd-mood` 是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，通过 USB 串口接收 **Claude Code / OpenAI Codex CLI / OpenCode / pi / WorkBuddy / DeepSeek Harness** 的运行状态，以「桌面小队」形式实时显示多个会话：每个会话是一只像素小生物，同时显示会话标题或目录名和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。外观是编译进固件的主题（经典 / 午夜 / 荧光终端 / 街机 / 剧场，后三个不分格子），方向和亮度也可调，都通过本地配置页 `page/serve.py` 设置，见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
 
 **跨平台桌面摆件（macOS / Linux / Windows）**。明确不做：WiFi 控制、OTA、launchd/systemd 系统级自启、自动化单元测试、蜂鸣器、多设备。Windows 端代码完成但 **untested on Windows** —— 欢迎社区验证（见 README）。Linux 同样未在 CI 验证，但 POSIX 路径与 macOS 共用，回归风险低。
 
@@ -70,7 +70,7 @@ daemon 选串口的优先级：`CLAWD_MOOD_PORT` → 配置文件的 `serial_por
 - **Singleton 用 portfile + connect() 探活而非 PID 文件**：避免脏 PID、避免 `pgrep -f` 在 Windows 上不存在的问题。代价是 daemon 异常崩了 portfile 可能残留，但下次启动会自动覆盖（`check_singleton()` 探不到活就 take over）。
 - **首条 SessionStart 状态消息会丢**：daemon 冷启动约 2–3 秒（uv 首次装 pyserial），此时 portfile 还没出现，`hook.py` 走 `port is None` 路径静默退出。下一条 `UserPromptSubmit` 会把状态补推上去，所以表情滞后但不会卡。
 - **daemon 永驻**：不在 `Stop` 事件里关 daemon，避免多个 CLI 会话相互踩踏。需要重启 daemon 就 `pkill -f scripts/daemon.py`（mac/linux）；Windows 上更稳的做法是按 PID 杀（避免 `taskkill /F /IM python.exe` 误杀其他 python 进程）。
-- **运行中拔插不退出**：写串口失败时关掉串口，TCP 继续收，消息丢弃。断开只记一次日志，恢复时记丢了多少条。之后的**消息**触发重新探测和打开，每 3 秒最多一次（`RECONNECT_INTERVAL_S`），没有消息就不会重连。连过 Espressif 板后，重连只等 Espressif 板。所以 TCP 发送成功不代表写进了串口，要看日志的 `-> line`
+- **运行中拔插不退出**：写串口失败时关掉串口，TCP 继续收，并立刻重新探测和打开一次（没察觉的拔插后板子往往已经插回，这条就不丢）；再失败才丢消息。之后的**消息**触发重新探测和打开，每 3 秒最多一次（`RECONNECT_INTERVAL_S`），没有消息就不会重连。打开要约 3.5 秒，期间接受循环停着，连接排在 `LISTEN_BACKLOG`（64）里，排满了 hook 的探活会失败并拉起第二个 daemon。退出时只删仍写着自己端口的 portfile。断开只记一次日志，恢复时记丢了多少条。连过 Espressif 板后，重连只等 Espressif 板。所以 TCP 发送成功不代表写进了串口，要看日志的 `-> line`
 - **板子卡死但没断开时会阻塞**：`flush()`（tcdrain）没有写超时，串行循环会卡住。用 pty 测试时要持续读 master，否则同样会卡，连带 `nc` 也不退出
 - **日志位置**：`<tempfile.gettempdir()>/clawd-mood-daemon.log` —— mac/linux 上 `${TMPDIR:-/tmp}/clawd-mood-daemon.log`（macOS 的 `$TMPDIR` 是 `/var/folders/...`，不是 `/tmp`），Windows 上 `%TEMP%\clawd-mood-daemon.log`。
 
@@ -96,17 +96,17 @@ hook 端不直接读 `48756`，而是读 portfile 拿实际端口。这样：
 
 ## 多会话屏幕（桌面小队）
 
-- 每页最多 4 个并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2；固件最多记 12 个（`MAX_SESSIONS`），满了淘汰最久没动静的非紧急会话
-- 超过 4 个时每 5 秒自动向左翻页（硬件没有按键），底部 4 像素页码条
-- 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒；该页页码块闪状态色。带 `quiet` 的消息例外
+- 每页几个会话、怎么排由主题定（`Theme.perPage` + `ThemeOps` 的布局钩子）。主题 1、2 用内置网格，每页最多 4 个并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。荧光终端每页 6 行，街机 12 个全在一页、不翻页，剧场每页 1 个。固件最多记 12 个（`MAX_SESSIONS`），满了淘汰最久没动静的非紧急会话
+- 多于一页时自动翻页（硬件没有按键），每页停 `Theme.pageMs`，0 是 5 秒（`PAGE_ROTATE_MS`，剧场用 5095）。主题 1、2 向左滑，底部 4 像素页码条（`PAGER_H`）；其他主题用 `transition` / `pagerHeight` / `pager` 换掉
+- 别的页有会话**进入** `waiting` / `error` 时立即翻过去，停留到解除或最多 10 秒（`URGENT_HOLD_MS`）；内置页码条上该页的页码块闪状态色。带 `quiet` 的消息例外。跳页和停留都在 sketch 里，主题只读 `heldUrgent()` / `isAlerting()`（街机只有一页，用它们决定焦点）
 - 会话位置稳定，新会话追加到末尾，状态变化不换位；有会话退出时后面的依次前移
 - 不同工具是不同角色，按 `src` 查当前主题的 `SKINS` 表（每个主题各有一份，6 个 agent 顺序相同），造型来自各自 logo。主题 1 的值：CC 橙色 Clawd、CX 戴 OpenAI 结帽子的白色小人（现图标，不是旧的云朵）、OC 黑色空心框、PI 像素 P（独眼）、DS 蓝鲸、WB 青绿猫；主题 2 的 CX / OC / PI 改成亮色，否则融进深色背景。同一工具的多个会话长得一样，靠标签区分；未知 `src` 用 Clawd 造型 + 轮换颜色
-- 状态靠形状 + 颜色区分（地砖色 + 右上角图标）。主题 1 的值：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z；主题 2 见 `theme_noir.cpp`
+- 状态靠形状 + 颜色区分（主题 1、2 是地砖色 + 右上角图标，主题 3–5 各有画法，见设计说明书）。主题 1 的值：idle 灰、thinking 蓝齿轮、working 绿键盘、waiting 黄问号、done 白对勾、error 红叉、sleeping 深灰 Z；主题 2 见 `theme_noir.cpp`
 - 改颜色要改具体主题，不要在 sketch 里写死：`theme.h` 的 `Palette` 按角色分字段，不借用状态色。主题 1 的画面被 `tools/preview/baseline.txt` 锁住
-- 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按单元格宽度在 UTF-8 边界截断
+- 标签优先显示会话标题，还没有标题时显示目录名；标题一旦拿到就保留，目录名随消息更新。按可用的像素宽度在 UTF-8 边界截断（`fitLabel()`）
 - 标题来源是 CLI 内部数据，可能随版本失效，读不到时静默退回目录名：Claude Code 读 `transcript_path` 里的 `ai-title` 记录，Codex 读 `~/.codex/session_index.jsonl` 的 `thread_name`
 - 中文用 `U8g2_for_Adafruit_GFX` 的 `u8g2_font_wqy12_t_gb2312`（GB2312 外的字符不显示，字库约占 208 KB 闪存）
-- 子代理是主小人头顶的一排小跟班（同款造型 12×9px，单会话全屏时翻倍），放不下显示 `+N`。动效：出现时落下、启动时看左右、工作时错拍跳动敲键盘、等待时变黄高跳（主小人同时显示 waiting 并翻页）、`SubagentStop` 后撒彩屑 1.5 秒再消失；收不到结束事件时，工具执行中 15 分钟（`FOLLOWER_EXPIRE_MS`）、工具之间（最后一条是 `PostToolUse` / `PostToolUseFailure`）2 分钟（`FOLLOWER_PAUSE_MS`）后移除，模型想得更久的会在下个工具事件时重新出现。所有 agent 都支持，同一只主小人跟自己工具的同款跟班。标签只由主代理更新
+- 子代理是主小人的小跟班，放不下显示 `+N`。主题 1、2 是头顶一排（同款造型 12×9px，单会话全屏时翻倍）；荧光终端在标题下一行，街机是头顶的僚机，剧场是侧幕的替角。计时和移除规则在 sketch 里，所有主题一样；这里列的动效是主题 1、2 用的内置 `drawFollowers()`，主题 3–5 自己画跟班，各有一套。动效：出现时落下、启动时看左右、工作时错拍跳动敲键盘、等待时变黄高跳（主小人同时显示 waiting 并翻页）、`SubagentStop` 后撒彩屑 1.5 秒再消失；收不到结束事件时，工具执行中 15 分钟（`FOLLOWER_EXPIRE_MS`）、工具之间（最后一条是 `PostToolUse` / `PostToolUseFailure`）2 分钟（`FOLLOWER_PAUSE_MS`）后移除，模型想得更久的会在下个工具事件时重新出现。所有 agent 都支持，同一只主小人跟自己工具的同款跟班。标签只由主代理更新
 - 用 `GFXcanvas16` 整屏帧缓冲（115 KB）一次刷新，不要回到 `fillScreen` 直接画屏，会闪
 
 hook 端的事件→状态映射是**多对一收敛**：`PreToolUse` / `PostToolUse` 都映射到 `working`，避免表情在工具调用过程中乱跳。**子代理不驱动主小人**：带 `agent_id` 的事件只更新头顶的小跟班；`SubagentStop` 常在主代理 `Stop` 之后才到（实测 13 次里 10 次），所以它只能移除跟班，不能改主状态，否则会盖掉 `done` 并卡到睡眠。改 `hook.py` 的 `EVENT_TO_STATE` 表时保持这个收敛行为。
@@ -169,7 +169,7 @@ state 枚举（小写、严格匹配）：`idle | thinking | working | waiting |
 - daemon 的连接过滤：第一个非空白字节不是 `{` 的连接直接丢弃（网页也能连这个端口，HTTP 请求体里可能带合法行）；`recv` 超时 0.3 秒（`CLIENT_TIMEOUT_S`），所以客户端连上后要立刻发，等太久这条就丢了
 - 固件只在两帧之间读串口，接收缓冲设为 4096 字节（`SERIAL_RX_BYTES`）。默认 256 字节时连发几条就丢行，已在真机复现
 - 未知 `state` 或坏 JSON：固件打 `[warn]` 到串口，不切换、不死
-- 设置行：`{"cfg":{"theme":N,"rotation":R,"brightness":B}}`，键都可选，没有 `state`，走 daemon 现有 TCP 端口。在任何会话逻辑之前处理并返回，不创建也不碰会话。未知主题回退主题 1；`rotation` 不在 0–3 忽略；`brightness` 限制到 10–100。默认 1 / 1 / 100，没收到过 `cfg` 的设备行为不变。Preferences 持久化（`setup` 里首帧前加载，防抖 1.5 秒，只写变化的键）。有变化时屏幕提示 3 秒，这是单向链路上唯一的确认；成功时**不打串口**：没人读，TX 缓冲满了会卡主循环
+- 设置行：`{"cfg":{"theme":N,"rotation":R,"brightness":B}}`，键都可选，没有 `state`，走 daemon 现有 TCP 端口。在任何会话逻辑之前处理并返回，不创建也不碰会话。未知主题回退主题 1；`rotation` 不在 0–3 忽略；`brightness` 限制到 10–100。默认 1 / 1 / 100，没收到过 `cfg` 的设备行为不变。Preferences 持久化（`setup` 里首帧前加载，防抖 1.5 秒，只写 `cfg` 改过且和 NVS 不同的键，NVS 里当前固件用不了的主题 id / 方向保留到升级回来）。有变化时屏幕提示 3 秒，这是单向链路上唯一的确认；成功时**不打串口**：没人读，TX 缓冲满了会卡主循环
 
 示例：`{"state":"working","event":"PreToolUse","tool":"Bash","session":"a00eada8","name":"clawd-mood","src":"CC"}`
 
@@ -270,6 +270,7 @@ uv run tools/preview/render.py                                  # 重新生成 p
 uv run tools/preview/render.py --contact /tmp/contact.png       # 总览图 + 对比度报告
 uv run tools/preview/render.py --compare tools/preview/baseline.txt   # 列出和 baseline 不同的帧
 uv run tools/preview/render.py --baseline                       # 确认变化后重录
+uv run tools/preview/render.py --timing                         # 各主题每帧的主机 CPU 时间，和经典比（只是参考）
 uv run tools/preview/headline.py                                # 改了页面标题文字时重新生成 assets/headline.png
 ```
 
@@ -314,10 +315,10 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 
 ## 仓库结构要点
 
-- `firmware/clawd_mood/theme.h`、`theme_classic.cpp`、`theme_noir.cpp` —— 主题。加主题只要一个 `theme_*.cpp` 加 `THEME_TABLE` 一项；id 只增不复用，`THEMES[0]` 是主题 1
+- `firmware/clawd_mood/theme.h`、`theme_classic.cpp`、`theme_noir.cpp`、`theme_phosphor.cpp`、`theme_arcade.cpp`、`theme_stage.cpp` —— 主题。加主题只要一个 `theme_*.cpp` 加 `THEME_TABLE` 一项；id 只增不复用，`THEMES[0]` 是主题 1。主题可以不用分格：`Theme.perPage` 定每页几个会话，`ThemeOps` 的 `page` / `transition` / `pager` 等钩子换掉内置布局；主题能读的会话表和绘制函数都声明在 `theme.h`，只读
 - `tools/preview/` —— 主机预览工具（`harness.cpp`、`shim/`、`scenes/`、`render.py`、`baseline.txt`；`headline.py` / `headline.cpp` 生成页面标题图）；`page/previews/` 是它的产物。`page/` 和 `tools/` 故意放在 `plugin/` 外：Codex 对整个插件目录算 hash，放进去用户要重新批准 12 个 hook
-- `page/` —— 配置页：`serve.py`（本地服务，自带 CSP / token）、`index.html`、`page.css`、`page.js`、`assets/`（`state-colors.json` 是手抄的各主题状态色，改调色板要同步）、`previews/`（`render.py` 的产物，别手改）
-- `firmware/clawd_mood/clawd_mood.ino` —— Arduino sketch；会话表 + `tickSessions()` 计时器 + `tickPaging()` 翻页 + `drawCell()` / `drawCreature()` 渲染 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
+- `page/` —— 配置页：`serve.py`（本地服务，自带 CSP / token）、`index.html`、`page.css`、`page.js`、`assets/`、`previews/`（`render.py` 的产物，别手改；卡带和状态图例的颜色都读 `previews/manifest.json`）
+- `firmware/clawd_mood/clawd_mood.ino` —— Arduino sketch；会话表 + `tickSessions()` 计时器 + `tickPaging()` 翻页 + `useTheme()` 换主题（开机读 NVS 和 `cfg` 都走它）+ `drawPage()` / `drawCell()` / `drawCreature()` 渲染 + `pollSerial()` 拼行 + `handleLine()` JSON 解析
 - `plugin/.claude-plugin/plugin.json` —— Claude Code 插件清单
 - `plugin/.codex-plugin/plugin.json` —— Codex CLI 插件清单（指向 `hooks-codex.json`）
 - `plugin/hooks/hooks.json` —— Claude Code 14 个事件全 `async: true`，命令统一指 `uv run "$CLAUDE_PLUGIN_ROOT"/scripts/hook.py`

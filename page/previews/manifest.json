@@ -7,6 +7,15 @@
       "tagline": "奶油色桌面，小队的原始模样",
       "min_fw": 1,
       "glow": "#da7756",
+      "state_colors": [
+        "#949594",
+        "#296df6",
+        "#18aa41",
+        "#ffce00",
+        "#ffffff",
+        "#e61c18",
+        "#41444a"
+      ],
       "scenes": {
         "squad": {
           "file": "theme-1/squad.png",
@@ -38,6 +47,15 @@
       "tagline": "深夜霓虹，暗场里只亮状态",
       "min_fw": 1,
       "glow": "#38e4ff",
+      "state_colors": [
+        "#9499c5",
+        "#39e6ff",
+        "#7bff62",
+        "#ffc629",
+        "#eeeeff",
+        "#ff4052",
+        "#7b7db4"
+      ],
       "scenes": {
         "squad": {
           "file": "theme-2/squad.png",
@@ -56,6 +74,126 @@
         "empty": {
           "file": "theme-2/empty.png",
           "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 3,
+      "key": "phosphor",
+      "name": "荧光终端",
+      "tagline": "绿色荧光屏上的会话进程表",
+      "min_fw": 2,
+      "glow": "#33ff77",
+      "state_colors": [
+        "#188941",
+        "#31ff73",
+        "#31ff73",
+        "#ffb200",
+        "#acffcd",
+        "#ff4041",
+        "#085029"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-3/squad.png",
+          "frames": 72,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-3/solo.png",
+          "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-3/empty.png",
+          "frames": 12,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 4,
+      "key": "arcade",
+      "name": "街机",
+      "tagline": "小队变成入侵者阵列",
+      "min_fw": 2,
+      "glow": "#ff3ea5",
+      "state_colors": [
+        "#cdc6f6",
+        "#39eaff",
+        "#7bff4a",
+        "#ffe24a",
+        "#ffffff",
+        "#ff384a",
+        "#6a6994"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-4/squad.png",
+          "frames": 96,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-4/solo.png",
+          "frames": 24,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-4/empty.png",
+          "frames": 96,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 5,
+      "key": "stage",
+      "name": "剧场",
+      "tagline": "聚光灯下只演一个主角",
+      "min_fw": 2,
+      "glow": "#e8b04b",
+      "state_colors": [
+        "#eeb24a",
+        "#5a7dff",
+        "#52d25a",
+        "#ffd629",
+        "#fff2cd",
+        "#ff3041",
+        "#6271de"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-5/squad.png",
+          "frames": 432,
+          "fps": 20,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-5/solo.png",
+          "frames": 30,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-5/empty.png",
+          "frames": 15,
           "fps": 10,
           "w": 240,
           "h": 240

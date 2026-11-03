@@ -147,7 +147,7 @@ static void scanlines(unsigned long) {
 }
 
 const Theme THEME_NOIR = {
-  2, "noir", "午夜", "深夜霓虹，暗场里只亮状态", 0x38E4FF, 1,
+  2, "noir", "午夜", "深夜霓虹，暗场里只亮状态", 0x38E4FF, 1, 4, 0,
   {
     PANEL, INK, WASH, RED,                 // bg gap waitFlash errorFrame
     PLATE, PAPER, PAPER, CYAN, CYAN,       // plate tileBorder text tag more

@@ -2,6 +2,7 @@
 // stage; only "apply" sends them. The device never answers, so nothing here may claim it changed.
 "use strict";
 
+// In the firmware's Mood order, which is also the order of each theme's state_colors in the manifest
 const STATE_NAMES = {
   idle: "空闲", thinking: "思考", working: "工作", waiting: "等待",
   done: "完成", error: "错误", sleeping: "睡眠",
@@ -24,7 +25,6 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const state = {
   token: null,
   themes: [],
-  stateColors: null,
   staged: { ...DEFAULTS },
   baseline: { ...DEFAULTS },   // what the device was last told, as far as this machine knows
   unsent: [],
@@ -145,6 +145,22 @@ function themeById(id) {
   return state.themes.find((t) => t.id === id);
 }
 
+// The oldest firmware any theme accepts. A theme above it needs newer firmware, and older firmware
+// shows the first theme instead and says so in its toast.
+function baseFirmware() {
+  return Math.min(...state.themes.map((t) => t.min_fw));
+}
+
+function needsNewerFirmware(theme) {
+  return Boolean(theme) && theme.min_fw > baseFirmware();
+}
+
+function fallbackTheme() {
+  return themeById(DEFAULTS.theme) || state.themes[0];
+}
+
+const cartNo = (theme) => String(theme.id).padStart(2, "0");
+
 function setTheme(id, animate) {
   const theme = themeById(id);
   if (!theme) return;
@@ -218,15 +234,19 @@ function setStatus(text, detail, tone, hold) {
 
 function buildCartridges() {
   const holder = $("cartridges");
+  const more = $("cart-more");
   const template = $("cart-template");
+  holder.style.setProperty("--carts", String(state.themes.length));
   for (const theme of state.themes) {
     const node = template.content.firstElementChild.cloneNode(true);
     const input = node.querySelector("input");
+    const newer = needsNewerFirmware(theme);
     input.value = String(theme.id);
-    input.setAttribute("aria-label", `${String(theme.id).padStart(2, "0")} ${theme.name}`);
-    node.querySelector(".cart__no").textContent = String(theme.id).padStart(2, "0");
+    input.setAttribute("aria-label", `${cartNo(theme)} ${theme.name}${newer ? "，需新版固件" : ""}`);
+    node.querySelector(".cart__no").textContent = cartNo(theme);
     node.querySelector(".cart__name").textContent = theme.name;
     node.querySelector(".cart__tagline").textContent = theme.tagline || "";
+    node.querySelector(".cart__req").hidden = !newer;
     node.style.setProperty("--cart-glow", theme.glow);
     input.addEventListener("change", () => {
       if (input.checked) {
@@ -234,7 +254,7 @@ function buildCartridges() {
         setTheme(theme.id, true);
       }
     });
-    holder.append(node);
+    holder.insertBefore(node, more);
     const scene = theme.scenes[CART_SCENE] || theme.scenes[STAGE_SCENE];
     playScene(makePlayer(node.querySelector("canvas"), scene), scene);
   }
@@ -259,13 +279,25 @@ function buildChips() {
 }
 
 function paintChips(themeId) {
-  const table = state.stateColors;
-  const colors = table && table.themes[String(themeId)];
+  const theme = themeById(themeId);
+  const colors = theme && theme.state_colors;
   if (!colors) return;
-  table.order.forEach((key, i) => {
+  Object.keys(STATE_NAMES).forEach((key, i) => {
     const chip = document.querySelector(`.chip[data-state="${key}"]`);
-    if (chip) chip.style.setProperty("--chip", colors[i]);
+    if (chip && colors[i]) chip.style.setProperty("--chip", colors[i]);
   });
+}
+
+// The page cannot know which firmware the board runs, so this only says what each case looks like
+function paintFirmwareHint() {
+  const newer = state.themes.filter(needsNewerFirmware);
+  const line = $("fw-themes");
+  line.hidden = newer.length === 0;
+  if (!newer.length) return;
+  const names = newer.map((t) => `${cartNo(t)} ${t.name}`).join("、");
+  const fallback = fallbackTheme().name;
+  line.textContent = `${names} 需要新版固件。固件较旧时收到这些样式会改用${fallback}：原来是${fallback}的屏幕不会有任何变化，`
+    + `原来是别的样式的会切到${fallback}并提示「主题 ${fallback}」。更新固件后按下面的按钮再发一次。`;
 }
 
 // ── Status poll: LEDs, drawer, serial list ───────────────────────
@@ -401,27 +433,37 @@ function paintTimeLeft(s) {
   $("time-left").textContent = left <= 120 ? `还剩 ${left} 秒` : "";
 }
 
-function showClosed(text) {
+function showClosed(why) {
   if (state.closed) return;
   state.closed = true;
-  $("closed-text").textContent = text;
+  $("closed-title").textContent = why.title;
+  $("closed-text").textContent = why.text;
   $("closed").hidden = false;
   document.body.classList.add("is-closed");
   for (const button of document.querySelectorAll("button, select, input")) button.disabled = true;
   if ($("drawer").open) $("drawer").close();
-  setStatus("页面服务已退出，没有发送", "", "bad", true);
-  for (const id of ["led-plugin", "led-daemon", "led-usb"]) setLed(id, "off", "页面服务已退出");
+  // A send result already on screen stays true after the server exits, so keep it
+  if (!state.statusHeld) setStatus(why.label, "", "bad", true);
+  for (const id of ["led-plugin", "led-daemon", "led-usb"]) setLed(id, "off", why.label);
 }
 
-const CLOSED_TEXT = "页面服务已退出：10 分钟无操作，或已运行满 1 小时。设备不受影响。要继续配置，在仓库目录重新运行：";
-const NO_TOKEN_TEXT = "这个页面的访问令牌无效。请回到终端，打开 serve.py 打印的完整地址，或重新运行：";
+const CLOSED = {
+  title: "本页已关闭",
+  label: "页面服务已退出",
+  text: "页面服务已退出：10 分钟无操作，或已运行满 1 小时。设备不受影响。要继续配置，在仓库目录重新运行：",
+};
+const NO_TOKEN = {
+  title: "本页无法连接",
+  label: "访问令牌无效",
+  text: "这个页面的访问令牌无效。请回到终端，打开 serve.py 打印的完整地址，或重新运行：",
+};
 
 async function poll() {
   if (state.closed) return;
   try {
     const { status, data } = await api("/api/status");
     if (status === 401) {
-      showClosed(NO_TOKEN_TEXT);
+      showClosed(NO_TOKEN);
       return;
     }
     if (status !== 200) throw new Error(String(status));
@@ -442,11 +484,18 @@ async function poll() {
     paintTimeLeft(data);
   } catch {
     state.fails += 1;
-    if (state.fails >= FAILS_BEFORE_CLOSED) showClosed(CLOSED_TEXT);
+    if (state.fails >= FAILS_BEFORE_CLOSED) showClosed(CLOSED);
   }
 }
 
 // ── Actions ──────────────────────────────────────────────────────
+
+// Only these reasons mean the device is missing; for the rest the explain line names the break
+const NO_DEVICE_REASONS = ["no_device", "serial_open_failed", "device_gone"];
+
+function notSentHeadline(reason) {
+  return NO_DEVICE_REASONS.includes(reason) ? "设备未连接，未发送" : "未发送";
+}
 
 function setBusy(button, busy) {
   button.classList.toggle("is-busy", busy);
@@ -459,9 +508,13 @@ async function sendCfg(button, force) {
   try {
     const { status, data } = await api("/api/cfg", { ...state.staged, force });
     if (status === 200 && data.result === "sent") {
-      setStatus("已发送，请看屏幕确认", "", "ok", true);
+      const sentTheme = data.changed && themeById(data.changed.theme);
+      const detail = needsNewerFirmware(sentTheme)
+        ? `如果屏幕没变化，或提示「主题 ${fallbackTheme().name}」，说明固件还不认识${sentTheme.name}，见下方「屏幕没变化，或样式不对？」。`
+        : "";
+      setStatus("已发送，请看屏幕确认", detail, "ok", true);
     } else if (status === 200 && data.result === "saved_not_sent") {
-      setStatus("已保存，设备未连接，未发送", data.explain, "bad", true);
+      setStatus(`已保存，${notSentHeadline(data.reason)}`, data.explain, "bad", true);
     } else if (status === 200 && data.result === "no_change") {
       setStatus("没有需要发送的改动", "", "", true);
     } else {
@@ -491,7 +544,7 @@ async function sendTest() {
     } else if (status === 200 && data.result === "busy") {
       setStatus("测试小人还在屏幕上", "等它离开再发一次。", "", true);
     } else if (status === 200 && data.result === "not_sent") {
-      setStatus("设备未连接，未发送", data.explain, "bad", true);
+      setStatus(notSentHeadline(data.reason), data.explain, "bad", true);
     } else {
       setStatus("没有发送", data.error || `服务返回 ${status}`, "bad", true);
     }
@@ -582,20 +635,23 @@ async function boot() {
   bindControls();
   buildChips();
   $("flash-command").textContent = FLASH_LINES.join("\n");
-  const [manifest, colors] = await Promise.all([
-    fetch("previews/manifest.json").then((r) => r.json()),
-    fetch("assets/state-colors.json").then((r) => r.json()).catch(() => null),
-  ]);
-  state.themes = manifest.themes;
-  state.stateColors = colors;
+  try {
+    const manifest = await fetch("previews/manifest.json").then((r) => r.json());
+    state.themes = Array.isArray(manifest.themes) ? manifest.themes : [];
+  } catch {
+    state.themes = [];
+  }
   buildCartridges();
+  paintFirmwareHint();
   stagePlayer = makePlayer($("stage-canvas"), null, $("reflect-canvas"));
   setTheme(DEFAULTS.theme, false);
   setRotation(DEFAULTS.rotation);
   setBrightness(DEFAULTS.brightness);
   syncPlayback();
+  // Without the manifest there are no cartridges, but the status poll and the other settings still work
+  if (!state.themes.length) setStatus("预览清单读不到，请重新运行 tools/preview/render.py", "", "bad", true);
   if (!state.token) {
-    showClosed(NO_TOKEN_TEXT);
+    showClosed(NO_TOKEN);
     return;
   }
   await poll();

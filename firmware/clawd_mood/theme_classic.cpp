@@ -90,7 +90,7 @@ static_assert(sizeof(SKINS) / sizeof(SKINS[0]) == SKIN_COUNT, "every theme carri
 #define MOSS    RGB(90, 140, 40)
 
 const Theme THEME_CLASSIC = {
-  1, "classic", "经典", "奶油色桌面，小队的原始模样", 0xDA7756, 1,
+  1, "classic", "经典", "奶油色桌面，小队的原始模样", 0xDA7756, 1, 4, 0,   // id key name tagline glow minFw perPage pageMs
   {
     CREAM, DIVIDER, YELLOW, RED,          // bg gap waitFlash errorFrame
     INK, INK, INK, INK, INK,              // plate tileBorder text tag more

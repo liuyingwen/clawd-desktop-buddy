@@ -10,6 +10,7 @@
     render.py --contact PATH  write an overview image of every theme
     render.py --baseline      re-record baseline.txt (only after looking at what changed)
     render.py --compare FILE  list every frame that differs from a recorded baseline
+    render.py --timing        host CPU time per frame of every theme, normal and page-change frames
 """
 import argparse
 import hashlib
@@ -177,13 +178,21 @@ def compare(baseline, current, verbose=True):
 
 # ── Previews ─────────────────────────────────────────────────────
 
-FPS = 10
-FRAME_MS = 1000 // FPS
+FPS = 10                          # a scene's preview rate unless its theme sets one
+PREVIEW_FPS = (20, 10, 5, 4, 2, 1)   # 20 catches every frame of a page change (50 ms apart)
+FRAME_MS_MAX = 100   # the firmware's FRAME_MS: no frame stays on screen longer
 W = H = 240
 FRAME_BYTES = W * H * 2
-MAX_SHEET_BYTES = 200 * 1024
+# Sheet size. A sheet's palette is the union of its frames' colours: at 16 or fewer the PNG is
+# 4 bits per pixel, a 240x240 frame is 28.8 KB and fits deflate's 32 KB window, so a frame that
+# repeats the previous one costs almost nothing. At 17+ colours a frame is 57.6 KB, out of reach,
+# and every frame is paid in full. Keep long loops at 16 colours or fewer.
+# 300 KB: a focus rotation needs about twice the 7.2 s squad loop, and theme 2's density at 17+
+# colours (146.6 KB for 72 frames) over 144 frames is about 293 KB.
+MAX_SHEET_BYTES = 300 * 1024
+MAX_PREVIEWS_BYTES = 2 * 1024 * 1024   # all of page/previews
 TOAST_WAIT_MS = 3200   # the cfg line selecting a theme shows a 3 s toast; start scenes after it
-PREVIEW_SCENES = ["squad", "solo", "empty"]
+PREVIEW_SCENES = ["squad", "solo", "empty"]   # same order as the firmware's PREVIEW_* enum
 
 
 def read_scene(name):
@@ -231,27 +240,48 @@ def shortest_loop(hashes):
     return n
 
 
-def render_preview(harness, theme, name, workdir):
+def preview_loop(theme, name):
+    """settle_ms, loop_ms and fps of one preview: the scene file's, overridden by the theme's non-zero values."""
     meta, lines = read_scene(name)
-    preview = meta["preview"]
-    start = TOAST_WAIT_MS + preview["settle_ms"]
-    stop = start + preview["loop_ms"]
+    loop = {**meta["preview"], "fps": FPS}
+    for key, value in theme.get("preview", {}).get(name, {}).items():
+        if value:
+            loop[key] = value
+    where = f"{theme['key']}/{name}"
+    if loop["fps"] not in PREVIEW_FPS:
+        sys.exit(f"{where}: fps {loop['fps']} is not one of {PREVIEW_FPS}")
+    if loop["loop_ms"] % (1000 // loop["fps"]):
+        sys.exit(f"{where}: loop_ms {loop['loop_ms']} is not a whole number of frames at {loop['fps']} fps")
+    return loop, lines
+
+
+def render_preview(harness, theme, name, workdir):
+    """Returns (frames as bytes, frame count, fps). Each preview frame is the one on screen at its instant."""
+    loop, lines = preview_loop(theme, name)
+    step = 1000 // loop["fps"]
+    start = TOAST_WAIT_MS + loop["settle_ms"]
+    stop = start + loop["loop_ms"]
     scene = select_theme(theme["id"]) + shifted(lines, TOAST_WAIT_MS)
-    scene += [{"t": start, "record": True}, {"t": stop + 5, "end": True}]
+    # From one frame slot early: the frame on screen at `start` may have been drawn just before it
+    scene += [{"t": start - FRAME_MS_MAX, "record": True}, {"t": stop + 5, "end": True}]
     scene.sort(key=lambda l: l["t"])
+    where = f"{theme['key']}/{name}"
     log, raw, report = run_lines(harness, scene, workdir, f"{theme['key']}-{name}")
     if report["serial_tx"]:
-        sys.exit(f"{theme['key']}/{name}: firmware printed {report['serial_tx']} bytes on a normal run")
-    if report["slide_frames"]:
-        sys.exit(f"{theme['key']}/{name}: slide frames are not on the {FRAME_MS} ms grid")
+        sys.exit(f"{where}: firmware printed {report['serial_tx']} bytes on a normal run")
     times = [int(l.split()[0]) for l in log]
-    if times != list(range(start, stop + 1, FRAME_MS)):
-        sys.exit(f"{theme['key']}/{name}: unexpected frame times {times[:3]}...")
-    period = shortest_loop([l.split()[2] for l in log])
+    if not times or times[0] > start:
+        sys.exit(f"{where}: no frame on screen at {start} ms, where the preview starts")
+    picks, j = [], 0
+    for tick in range(start, stop + 1, step):
+        while j + 1 < len(times) and times[j + 1] <= tick:
+            j += 1
+        picks.append(j)
+    period = shortest_loop([log[i].split()[2] for i in picks])
     if period is None:
-        sys.exit(f"{theme['key']}/{name}: does not loop over {preview['loop_ms']} ms; "
+        sys.exit(f"{where}: does not loop over {loop['loop_ms']} ms; "
                  "that is not a multiple of an animation on screen")
-    return raw[:period * FRAME_BYTES], period
+    return b"".join(raw[i * FRAME_BYTES:(i + 1) * FRAME_BYTES] for i in picks[:period]), period, loop["fps"]
 
 
 def rgb8(c):
@@ -336,24 +366,41 @@ def render_all(harness):
     with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor() as pool:
         done = list(pool.map(lambda job: render_preview(harness, job[0], job[1], tmp), jobs))
     files, entries = {}, {t["id"]: {} for t in themes}
-    for (theme, name), (raw, frames) in zip(jobs, done):
+    for (theme, name), (raw, frames, fps) in zip(jobs, done):
         rel = f"theme-{theme['id']}/{name}.png"
         files[rel] = encode_indexed_png(raw, frames)
-        entries[theme["id"]][name] = {"file": rel, "frames": frames, "fps": FPS, "w": W, "h": H}
+        entries[theme["id"]][name] = {"file": rel, "frames": frames, "fps": fps, "w": W, "h": H}
     manifest = {"themes": [{"id": t["id"], "key": t["key"], "name": t["name"], "tagline": t["tagline"],
-                            "min_fw": t["min_fw"], "glow": t["glow"], "scenes": entries[t["id"]]} for t in themes]}
+                            "min_fw": t["min_fw"], "glow": t["glow"], "state_colors": state_colors(t),
+                            "scenes": entries[t["id"]]} for t in themes]}
     return files, manifest
+
+
+def state_colors(theme):
+    """Palette.state as the panel shows it, in Mood order (idle thinking working waiting done error sleeping)."""
+    return ["#%02x%02x%02x" % rgb8(c) for c in theme["pal"]["state"]]
 
 
 def manifest_text(manifest):
     return json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
 
 
+def size_problems(sizes):
+    """sizes: {relative path: bytes}. Sheets over MAX_SHEET_BYTES, and the total over MAX_PREVIEWS_BYTES."""
+    problems = [f"{rel} (over {MAX_SHEET_BYTES // 1024} KB)" for rel, n in sizes.items() if n > MAX_SHEET_BYTES]
+    total = sum(sizes.values())
+    if total > MAX_PREVIEWS_BYTES:
+        problems.append(f"page/previews ({total / 1024:.0f} KB, over {MAX_PREVIEWS_BYTES // 1024} KB)")
+    return problems
+
+
 def write_previews(files, manifest):
     for rel, blob in files.items():
         print(f"  {rel}: {len(blob) / 1024:.1f} KB")
-        if len(blob) > MAX_SHEET_BYTES:
-            sys.exit(f"{rel} is over {MAX_SHEET_BYTES // 1024} KB: shorten that scene's loop_ms")
+    print(f"  total: {sum(map(len, files.values())) / 1024:.1f} KB")
+    problems = size_problems({rel: len(blob) for rel, blob in files.items()})
+    if problems:
+        sys.exit("too big: " + ", ".join(problems) + ". Shorten that loop, lower its fps or use fewer colours")
     for rel, blob in files.items():
         path = PREVIEWS / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -366,13 +413,73 @@ def check_previews(files, manifest):
     path = PREVIEWS / "manifest.json"
     if not path.exists() or path.read_text(encoding="utf-8") != manifest_text(manifest):
         problems.append("manifest.json")
+    sizes = {}
     for rel, blob in files.items():
         path = PREVIEWS / rel
         if not path.exists() or decode_png_pixels(path.read_bytes()) != decode_png_pixels(blob):
             problems.append(rel)
-        elif path.stat().st_size > MAX_SHEET_BYTES:
-            problems.append(f"{rel} (over {MAX_SHEET_BYTES // 1024} KB)")
-    return problems
+        else:
+            sizes[rel] = path.stat().st_size
+    return problems + size_problems(sizes)
+
+
+# ── Timing ───────────────────────────────────────────────────────
+
+TIMING_SCENES = ["squad", "solo", "paging-5", "paging-12"]
+TIMING_RUNS = 3
+
+
+def timing_scene(theme_id, name):
+    """A scene in theme theme_id, its own end kept, recorded only after the theme's toast."""
+    lines = [json.loads(raw) for raw in (SCENES / f"{name}.ndjson").read_text(encoding="utf-8").splitlines()]
+    scene = select_theme(theme_id) + shifted([l for l in lines if "t" in l], TOAST_WAIT_MS)
+    scene.append({"t": TOAST_WAIT_MS, "record": True})
+    return sorted(scene, key=lambda l: l["t"])
+
+
+def theme_timing(harness, theme, workdir):
+    """Host CPU time of a frame, one run after another so runs don't compete for cores."""
+    buckets = {kind: {"frames": 0, "sum": 0.0, "maxes": []} for kind in ("normal", "transition")}
+    ticks = [0, 0.0]
+    for run in range(TIMING_RUNS):
+        run_max = {kind: None for kind in buckets}
+        for name in TIMING_SCENES:
+            work = Path(workdir)
+            scene, out = work / f"t{theme['id']}-{name}.ndjson", work / f"t{theme['id']}-{name}.json"
+            scene.write_text("\n".join(line_json(l) for l in timing_scene(theme["id"], name)) + "\n", encoding="utf-8")
+            subprocess.run([str(harness), "--scene", str(scene), "--timing", str(out)], check=True)
+            result = json.loads(out.read_text())
+            ticks[0] += result["ticks"]["loops"]
+            ticks[1] += result["ticks"]["mean_us"] * result["ticks"]["loops"]
+            for kind, b in buckets.items():
+                r = result[kind]
+                b["frames"] += r["frames"]
+                b["sum"] += r["mean_us"] * r["frames"]
+                if r["frames"]:
+                    run_max[kind] = max(run_max[kind] or 0.0, r["max_us"])
+        # One worst frame per run, over all its scenes, so light scenes don't pull the median down
+        for kind, top in run_max.items():
+            if top is not None:
+                buckets[kind]["maxes"].append(top)
+    result = {kind: (b["frames"], b["sum"] / b["frames"] if b["frames"] else 0.0,
+                     sorted(b["maxes"])[len(b["maxes"]) // 2] if b["maxes"] else 0.0) for kind, b in buckets.items()}
+    result["ticks"] = ticks[1] / ticks[0] if ticks[0] else 0.0
+    return result
+
+
+def report_timing(harness):
+    print(f"host CPU time of a frame, {TIMING_RUNS} runs of {', '.join(TIMING_SCENES)}; "
+          "max is the median of the per-run maxima. A proxy for device cost, not device time.")
+    print("  A frame is timed from the start of loop() to the push, so it includes that loop's ticks;")
+    print("  'ticks us' is the mean cost of a loop that drew nothing.")
+    print(f"  {'theme':<14}{'normal frames':>14}{'mean us':>9}{'max us':>9}{'page-change':>13}{'mean us':>9}{'max us':>9}"
+          f"{'ticks us':>10}")
+    with tempfile.TemporaryDirectory() as tmp:
+        for theme in load_themes(harness):
+            t = theme_timing(harness, theme, tmp)
+            (n, mean, top), (sn, smean, stop) = t["normal"], t["transition"]
+            print(f"  {theme['id']} {theme['key']:<12}{n:>14}{mean:>9.1f}{top:>9.1f}{sn:>13}{smean:>9.1f}{stop:>9.1f}"
+                  f"{t['ticks']:>10.3f}")
 
 
 # ── Contrast ─────────────────────────────────────────────────────
@@ -455,8 +562,9 @@ def toast_frame(harness, theme, workdir):
     meta, lines = read_scene("squad")
     scene = select_theme(theme["id"]) + shifted(lines, TOAST_WAIT_MS)
     at = TOAST_WAIT_MS + 1000
+    # A full frame period wide: a page change can move the frame phase, so a narrower window may catch nothing
     scene += [{"t": at, "send": {"cfg": {"rotation": 2, "brightness": 70}}}, {"t": at + 300, "record": True},
-              {"t": at + 305, "end": True}]
+              {"t": at + 300 + FRAME_MS_MAX, "end": True}]
     scene.sort(key=lambda l: l["t"])
     return run_lines(harness, scene, workdir, f"toast-{theme['id']}")[1][:FRAME_BYTES]
 
@@ -516,6 +624,7 @@ def main():
     ap.add_argument("--theme", type=int, help="contact sheet of this theme only")
     ap.add_argument("--baseline", nargs="?", const=str(BASELINE), metavar="FILE", help="re-record frame hashes")
     ap.add_argument("--compare", metavar="FILE", help="list frames that differ from a recorded baseline")
+    ap.add_argument("--timing", action="store_true", help="host CPU time per frame of every theme")
     ap.add_argument("--sketch", metavar="DIR", default=str(FIRMWARE), help="firmware folder to compile")
     ap.add_argument("--define", action="append", default=[], metavar="NAME", help="extra -D for the firmware")
     args = ap.parse_args()
@@ -526,6 +635,8 @@ def main():
         print(f"{sum(map(len, frames.values()))} frames in {len(frames)} scenes -> {args.baseline}")
     elif args.compare:
         sys.exit(1 if compare(read_baseline(args.compare), record_all(harness)) else 0)
+    elif args.timing:
+        report_timing(harness)
     elif args.contact:
         write_contact(harness, args.contact, args.contact_scale, args.theme)
         report_contrast(load_themes(harness))
