@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **跨平台桌面摆件（macOS / Linux / Windows）**。明确不做：WiFi 控制、OTA、launchd/systemd 系统级自启、自动化单元测试、蜂鸣器、多设备。Windows 端代码完成但 **untested on Windows** —— 欢迎社区验证（见 README）。Linux 同样未在 CI 验证，但 POSIX 路径与 macOS 共用，回归风险低。
 
+**用户要安装、换样式、调方向 / 亮度、更新、排查或卸载时，照 `.agents/skills/clawd-mood/SKILL.md` 做**（Codex、Cursor、OpenCode、pi 会自动发现 `.agents/skills/`，Claude Code 不会，所以写在这里）。用户一般用 `npx skills add liuyingwen/clawd-desktop-buddy -g` 装这个技能，装的是拷贝，不在仓库里，所以技能开头要自己找仓库（找不到就克隆到 `~/clawd-mood`），别写死相对路径。README 是给用户看的，只留概要和图，安装细节都在这个技能里：改了安装步骤、插件挂载方式或排查方法，同步改技能，不要加回 README。
+
 ## 三段式架构
 
 整个数据流单向，**Mac → ESP32**：
@@ -37,7 +39,7 @@ firmware/clawd_mood/*.ino     (Arduino 状态机 + 主题渲染)
 ## 关键约束（容易踩坑）
 
 ### 1. 显示器 VCC 接 3.3V，**不要接 5V**
-ST7789 的 VCC 接到 ESP32-C3 的 3V3 引脚。接 5V 会烧屏。README 烧录段已写明，改文档时不要弄错。
+ST7789 的 VCC 接到 ESP32-C3 的 3V3 引脚。接 5V 会烧屏。README 和 SKILL.md 的接线表都写明了，改文档时不要弄错。
 
 ### 2. `USB CDC On Boot` 必须 Enabled
 板子在 Arduino IDE 配置里必须开 USB CDC On Boot。关掉了 daemon 看不到串口、屏幕也不会更新。`-b esp32:esp32:esp32c3:CDCOnBoot=cdc,...` 这串参数里的 `CDCOnBoot=cdc` 就是这意思。
@@ -201,7 +203,7 @@ arduino-cli upload -p COM3 -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,Uplo
 - Linux: `ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null`
 - Windows PowerShell: `Get-CimInstance Win32_SerialPort | Select Name,DeviceID`
 
-首次环境（README §1-3）：
+首次环境（SKILL.md「安装」1–2 步）：
 - macOS: `brew install arduino-cli uv`（不再需要 jq）
 - Linux: 系统包管理器装 `arduino-cli` + `uv`，加入 `dialout` 组
 - Windows: `winget install ArduinoSA.CLI astral-sh.uv`
@@ -271,6 +273,7 @@ uv run tools/cursor_hooks.py install      # 卸载：uninstall；测试时加 --
 
 ```bash
 uv run page/serve.py            # 打开浏览器；--no-open 只打印地址，--port N 指定端口
+uv run page/serve.py --set theme=2 brightness=60   # 不开页面：--set / --resend / --test / --status，做完就退出
 ```
 
 只绑 `127.0.0.1`，地址里带一次性 token，10 分钟无操作退出，最长 1 小时。页面只能说「已发送」，不能说「已生效」：协议单向，设备不回话。测试时设 `TMPDIR` 和 `CLAWD_MOOD_CONFIG` 到临时目录，不要碰真实的 portfile 和配置文件。
@@ -287,7 +290,7 @@ uv run tools/preview/render.py --timing                         # 各主题每�
 uv run tools/preview/headline.py                                # 改了页面标题文字时重新生成 assets/headline.png
 ```
 
-要先按 README 装好 Arduino 库，它用的是同一份 GFX / U8g2 / ArduinoJson，再加一个主机 C++ 编译器。加主题的完整步骤见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
+要先装好 Arduino 库（SKILL.md「安装」第 2 步），它用的是同一份 GFX / U8g2 / ArduinoJson，再加一个主机 C++ 编译器。加主题的完整步骤见 `docs/superpowers/specs/2026-11-02-config-page-themes-design.md`。
 
 ### 手动测试（不依赖 Claude Code）
 
@@ -345,6 +348,7 @@ JSON 校验：`python3 -m json.tool plugin/hooks/hooks.json`
 - `plugin/scripts/daemon.py` —— PEP 723 内联依赖，TCP server ↔ 串口桥；portfile 服务发现；拔插恢复；读配置文件的 `serial_port`。要兼容 Python 3.9
 - `.agents/plugins/marketplace.json` —— Codex 本地 marketplace 入口
 - `AGENTS.md` —— Codex 项目守则，指回本文件
+- `.agents/skills/clawd-mood/` —— 给用户的 agent 用的技能（`SKILL.md` + `references/agents.md` 各 agent 接入、更新和卸载 + `references/troubleshooting.md`）。改设置走 `page/serve.py --set`；`images/themes/*.gif` 是 README 用的主题动图，取自 `page/previews/` 的帧
 - `docs/superpowers/specs/2026-06-07-clawd-mood-design.md` —— 原始设计说明书（**改架构前先读这个**）
 - `docs/superpowers/specs/2026-06-07-codex-support-design.md` —— Codex 支持设计说明书
 - `docs/superpowers/specs/2026-06-08-windows-linux-support-design.md` —— Windows + Linux 跨平台设计说明书

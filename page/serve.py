@@ -6,6 +6,7 @@
 """clawd-mood config page — a local server for page/ that talks to the daemon.
 
     uv run page/serve.py [--no-open] [--port N]
+    uv run page/serve.py --set theme=2 brightness=60   # or --resend, --test, --status: one action, no page
 
 Binds 127.0.0.1 only. A 256-bit token travels in the URL fragment (never sent to the server or
 written to a log) and every /api/* call must return it in X-Clawd-Token. Host and Origin are
@@ -885,11 +886,50 @@ def watchdog(server: LocalServer, life: Lifetime) -> None:
             return
 
 
+def parse_settings(pairs: list[str]) -> dict:
+    body = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or key not in CFG_KEYS or not re.fullmatch(r"\d{1,3}", value):
+            raise ApiError(400, f"expected KEY=NUMBER with KEY in {', '.join(CFG_KEYS)}: {pair}")
+        body[key] = int(value)
+    return body
+
+
+def run_once(args) -> int:
+    """One action without the page, for agents and scripts: the same code paths as the page's API,
+    so the config file's last_sent stays right. Prints JSON; exit 0 means sent (or no change)."""
+    app = App(token="")
+    try:
+        if args.status:
+            print(json.dumps(build_status(app.life), ensure_ascii=False, indent=2))
+            return 0
+        if args.test:
+            _, reply = app.api_test()
+            if app.test_thread is not None:
+                app.test_thread.join()   # the creature works, finishes and leaves before we exit
+        else:
+            body = {**read_config()["last_sent"], "force": True} if args.resend else parse_settings(args.set)
+            _, reply = app.api_cfg(body)
+    except ApiError as e:
+        reply = {"result": "error", "explain": e.message}
+    print(json.dumps(reply, ensure_ascii=False, indent=2))
+    return 0 if reply["result"] in ("sent", "no_change") else 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="clawd-mood config page")
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     parser.add_argument("--port", type=int, default=0, help="TCP port on 127.0.0.1 (default: random)")
+    once = parser.add_mutually_exclusive_group()
+    once.add_argument("--set", nargs="+", metavar="KEY=N",
+                      help="send theme / rotation / brightness to the device and exit")
+    once.add_argument("--resend", action="store_true", help="send every saved setting again and exit (after reflashing)")
+    once.add_argument("--test", action="store_true", help="show the test creature on the screen and exit")
+    once.add_argument("--status", action="store_true", help="print the page's diagnostics as JSON and exit")
     args = parser.parse_args()
+    if args.set or args.resend or args.test or args.status:
+        sys.exit(run_once(args))
     if not 0 <= args.port <= 65535:
         parser.error("--port must be 0-65535")
 

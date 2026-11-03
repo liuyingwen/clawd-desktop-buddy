@@ -117,7 +117,13 @@ tools/preview/render.py ── 主机编译真实固件 ──→ page/previews/
 ```bash
 uv run page/serve.py            # 打开浏览器
 uv run page/serve.py --no-open  # 只打印地址
+uv run page/serve.py --set theme=2 brightness=60   # 不开页面，做一件事就退出
+uv run page/serve.py --resend   # 重发全部已保存的设置（=「重新发送全部设置」）
+uv run page/serve.py --test     # 测试小人，等它离开后退出
+uv run page/serve.py --status   # 诊断信息，JSON
 ```
+
+**命令行模式给 agent 用**（`.agents/skills/clawd-mood/SKILL.md`）：直接调用页面 API 的同一套函数（`api_cfg` / `api_test` / `build_status`），不起 HTTP 服务，结果打印成 JSON，`sent` / `no_change` 时退出码 0。不让 agent 直接往 daemon 端口发 `cfg` 行，是因为那样不更新 `last_sent`，之后在页面上改回原值会被当成没有变化。
 
 **放在 `plugin/` 外**：Codex 对整个插件目录算 hash，放进去的任何文件变动都会让用户重新批准 12 个 hook。`page/`、`tools/` 改动不影响已批准的 hook。
 
