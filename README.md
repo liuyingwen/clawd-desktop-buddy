@@ -1,6 +1,6 @@
 # clawd-mood
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** / **Cursor** 的运行状态。每个会话是一只像素小生物（每个工具一个由 logo 拟人的角色），同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
+ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code** / **OpenAI Codex CLI** / **OpenCode** / **pi** / **WorkBuddy（CodeBuddy Code）** / **DeepSeek Harness** / **Cursor** 的运行状态。每个会话是一只像素小生物（每个工具一个由 logo 拟人的角色），同时显示会话标题和 7 种状态之一（idle / thinking / working / waiting / done / error / sleeping）。屏幕有 5 套样式，在[配置页](#5-配置页换主题调方向和亮度)里切换。各端可独立挂、可同装、可同时跑。跨平台：macOS / Linux / Windows。
 
 以 [Apache License 2.0](LICENSE) 开源。
 
@@ -19,6 +19,20 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，USB 串口实时显示 **Claude Code*
   <img src="images/hero.png" width="48%" alt="clawd-mood on a coding desk next to a MacBook, its screen showing four sessions as a squad of pixel creatures" />
   <img src="images/with-claude-pandas.jpg" width="48%" alt="clawd-mood showing three sessions, flanked by two Claude panda figurines" />
 </p>
+
+## 屏幕样式
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="images/themes/classic.gif" width="240" alt="经典" /><br /><b>01 经典</b>（默认）</td>
+    <td align="center" width="33%"><img src="images/themes/noir.gif" width="240" alt="午夜" /><br /><b>02 午夜</b></td>
+    <td align="center" width="33%"><img src="images/themes/phosphor.gif" width="240" alt="荧光终端" /><br /><b>03 荧光终端</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/themes/arcade.gif" width="240" alt="街机" /><br /><b>04 街机</b></td>
+    <td align="center"><img src="images/themes/stage.gif" width="240" alt="剧场" /><br /><b>05 剧场</b></td>
+  </tr>
+</table>
 
 ## 准备
 
@@ -265,24 +279,26 @@ Cursor 会自动重载这个文件，新开一个对话就生效。条目指向�
 
 #### 同时挂
 
-多端可同时跑，每个会话各占一格，左上角标来源：`CC`（Claude Code）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`WB`（WorkBuddy / CodeBuddy Code）、`DS`（DeepSeek Harness）、`CU`（Cursor）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
+多端可同时跑，每个会话标着来源：`CC`（Claude Code）、`CX`（Codex）、`OC`（OpenCode）、`PI`（pi）、`WB`（WorkBuddy / CodeBuddy Code）、`DS`（DeepSeek Harness）、`CU`（Cursor）。daemon 单实例、TCP server 多客户端，互不冲突。OpenCode 和 pi 按进程计，一个进程一只。
 
 ### 3. 屏幕说明
 
-默认主题「经典」每页最多显示 4 个会话并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。超过 4 个时每 5 秒自动翻页；别的页有会话进入 Waiting 或 Error 时会立即翻过去，停留到状态解除，最多 10 秒；单次工具失败只显示 Error，不翻页，因为 agent 通常会继续干活。别的主题每页放几个、怎么排不一样（荧光终端每页 6 行，街机 12 个全在一屏，剧场每页一个），但最多记 12 个会话、紧急状态优先显示这些规则都一样，见[配置页](#5-配置页换主题调方向和亮度)。
+默认主题「经典」每页最多显示 4 个会话并撑满屏幕：1 个全屏，2 个左右拆分，3 个左大右二，4 个 2×2。超过 4 个时每 5 秒自动翻页；别的页有会话进入 Waiting 或 Error 时会立即翻过去，停留到状态解除，最多 10 秒。其他主题的排法见[屏幕样式](#屏幕样式)。
 
 每格下方显示会话标题，还没有标题时显示目录名。标题读自 CLI 的内部数据（目前支持 Claude Code 和 Codex），读不到时同样显示目录名。中文支持 GB2312 字符集，范围外的字符和 emoji 不显示。
 
-不同工具显示不同的小人，造型来自各自的 logo。下面的造型和颜色是默认主题「经典」的，换主题后状态含义不变，外观以主题为准（见[配置页](#5-配置页换主题调方向和亮度)）。Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫，Cursor 是灰色的等距立方体。同一工具的多个会话长得一样，靠标题区分。
+不同工具显示不同的小人，造型来自各自的 logo（以下按默认主题「经典」描述）：Claude Code 是橙色 Clawd，Codex 是头戴 OpenAI 结的白色小人，OpenCode 是黑色空心方框，pi 是独眼的像素 P，DeepSeek 是蓝鲸，WorkBuddy 是青绿色的猫，Cursor 是灰色的等距立方体。同一工具的多个会话长得一样，靠标题区分。
+
+子代理显示为主小人头顶的小跟班，放不下时显示 `+N`（Cursor 不显示）。
 
 | 状态     | 地砖色 / 右上角图标 | 触发                                                                  |
 | -------- | ------------- | --------------------------------------------------------------------- |
-| Idle     | 灰 / 无 | 会话开始或结束 / Stop 后 3 秒回归 / 中断回合（Codex、OpenCode、pi、Cursor） |
+| Idle     | 灰 / 无 | 会话开始 / Done 3 秒后回归 / 中断回合（Codex、OpenCode、pi、Cursor） |
 | Thinking | 蓝 / 齿轮 | 提交 prompt / 压缩上下文中                                            |
 | Working  | 绿 / 键盘 | 调用工具 / 压缩完恢复                                                 |
 | Waiting  | 黄 / 问号，格子闪烁 | 等你批准或回答问题（DeepSeek Harness 桥接、Cursor 无）                    |
 | Done     | 白 / 对勾 | 回答完成（3 秒瞬态）                                                  |
-| Error    | 红 / 叉号，红框 | 工具失败 / API 报错（Claude、WorkBuddy、OpenCode、pi、Cursor）         |
+| Error    | 红 / 叉号，红框 | API 报错等导致回合失败（Codex、DeepSeek Harness 桥接无）              |
 | Sleeping | 深灰 / Z | 5 分钟无事件（Working 为 15 分钟，Waiting 不睡）；30 分钟无事件的会话会从屏幕移除 |
 
 各端能显示的状态：
@@ -360,15 +376,7 @@ uv run page\serve.py
 
 页面只监听本机，地址里带一次性令牌。10 分钟没有操作会自动关闭（最长 1 小时），重新运行上面的命令即可。daemon 没在跑时，页面发设置前会把它拉起来。
 
-| 主题 | 风格 |
-| ---- | ---- |
-| 1 经典（默认） | 奶油色桌面，小队的原始模样 |
-| 2 午夜 | 深夜霓虹，暗场里只亮状态 |
-| 3 荧光终端 | 绿色荧光屏上的会话进程表 |
-| 4 街机 | 小队变成入侵者阵列 |
-| 5 剧场 | 聚光灯下只演一个主角 |
-
-主题 3–5 不是分格子的：荧光终端每行一个会话，每页 6 行，翻页时整表上滚；街机把全部会话排成一个入侵者阵列，飞船和底部字幕轮流对准每个会话，有会话等你批准或出错时先对准它；剧场每页一个会话站在聚光灯下，其他会话坐在前排，翻页时拉幕。
+![配置页](images/config-page.png)
 
 **主题 3–5 要重新烧固件。** 它们比主题 1–2 晚加入，已经烧过 0.3.0 的板子也要重烧一次（命令见[编译 + 上传](#5-编译--上传)），烧完在配置页按「重新发送全部设置」。没重烧的固件不认识它们，收到后会退回「经典」，并且按「经典」存进闪存，所以重烧后要再发一次。页面不知道板子上是哪个固件，这几个卡带上都标着「需新版固件」。
 
