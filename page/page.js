@@ -14,9 +14,10 @@ const CART_SCENE = "solo";
 const POLL_MS = 3000;
 const TOUCH_THROTTLE_MS = 30000;
 const FAILS_BEFORE_CLOSED = 2;
+// The prebuilt image from GitHub Releases; README's 手动安装 has the same lines and the compile route
 const FLASH_LINES = [
-  "arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood",
-  "arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood",
+  "curl -LO https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest/download/clawd-mood-esp32c3.bin",
+  "uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 clawd-mood-esp32c3.bin",
 ];
 
 const $ = (id) => document.getElementById(id);

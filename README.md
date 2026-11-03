@@ -46,7 +46,7 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Code
 npx skills add liuyingwen/clawd-desktop-buddy -g
 ```
 
-再跟 agent 说「帮我安装 clawd-mood」。它会装好工具链、烧录固件、接上插件，最后在屏幕上放一个测试小人让你确认。之后换样式、排查、更新、卸载也都直接跟它说。
+再跟 agent 说「帮我安装 clawd-mood」。它会烧录固件、接上插件，最后在屏幕上放一个测试小人让你确认。之后换样式、排查、更新、卸载也都直接跟它说。
 
 不想装技能，就把这段话发给 agent：
 
@@ -56,7 +56,41 @@ npx skills add liuyingwen/clawd-desktop-buddy -g
 需要我动手的步骤告诉我；需要 sudo 或修改系统配置时先问我。
 ```
 
-不用 agent 的话，照着 [SKILL.md](.agents/skills/clawd-mood/SKILL.md) 手动做也一样。
+### 手动安装
+
+先装好 [uv](https://docs.astral.sh/uv/getting-started/installation/)，再克隆仓库，插件要从这里加载：
+
+```bash
+git clone https://github.com/liuyingwen/clawd-desktop-buddy ~/clawd-mood
+cd ~/clawd-mood
+```
+
+**1. 烧固件**，下面两种方式选一种。`<串口>` 换成板子的串口：macOS 用 `ls /dev/cu.usbmodem*` 查，Linux 用 `ls /dev/ttyACM*`（没权限就 `sudo usermod -aG dialout $USER` 后重新登录），Windows 在设备管理器里看 COM 号。
+
+**方式一：直接烧录**（推荐）。下载预编译好的固件烧进去，不用装编译环境：
+
+```bash
+curl -LO https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest/download/clawd-mood-esp32c3.bin
+uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 clawd-mood-esp32c3.bin
+```
+
+Windows PowerShell 里把 `curl` 换成 `curl.exe`，也可以到 [Releases](https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest) 页面下载。以后重烧会清掉保存的样式，烧完运行 `uv run page/serve.py --resend` 恢复。
+
+**方式二：从源码编译**。改了固件或接线不一样时用，要先装 [arduino-cli](https://arduino.github.io/arduino-cli/latest/installation/)，ESP32 板支持包要下载几个 GB。接线不一样就先改 `firmware/clawd_mood/clawd_mood.ino` 里的引脚。
+
+```bash
+arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library" "ArduinoJson" "U8g2_for_Adafruit_GFX"
+arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
+arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
+```
+
+烧不进去：先关掉串口监视器，用过 clawd-mood 的话再停掉后台的 daemon（`pkill -f scripts/daemon.py`）；还不行就按住板子上的 BOOT 键再插 USB，然后重试。
+
+**2. 接上 agent**：在 [agents.md](.agents/skills/clawd-mood/references/agents.md) 里找到你用的 agent，在仓库目录运行它下面的安装命令。
+
+**3. 测试**：在仓库目录运行 `uv run page/serve.py --test`，屏幕上会出现一个测试小人，干一会儿活再离开。然后新开一个 agent 会话发句话，屏幕上就会出现它。
 
 ## 换样式
 
