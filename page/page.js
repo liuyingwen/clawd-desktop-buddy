@@ -1,5 +1,6 @@
 // clawd-mood config page. Theme, rotation and brightness are staged here and previewed on the
-// stage; only "apply" sends them. The device never answers, so nothing here may claim it changed.
+// stage; "apply" sends them, and each cartridge's own button sends just its theme. The device never
+// answers, so nothing here may claim it changed.
 "use strict";
 
 // In the firmware's Mood order, which is also the order of each theme's state_colors in the manifest
@@ -14,6 +15,9 @@ const CART_SCENE = "solo";
 const POLL_MS = 3000;
 const TOUCH_THROTTLE_MS = 30000;
 const FAILS_BEFORE_CLOSED = 2;
+const CART_CONFIRM_MS = 2200;
+const CART_SEND = "应用到屏幕";
+const CART_RESEND = "再发一次";
 // The prebuilt image from GitHub Releases; README's 手动安装 has the same lines and the compile route
 const FLASH_LINES = [
   "curl -LO https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest/download/clawd-mood-esp32c3.bin",
@@ -35,6 +39,9 @@ const state = {
   fails: 0,
   lastTouch: 0,
   serialTouched: false,
+  carts: [],        // { theme, input, button, note, sentTag, confirmTimer }
+  sending: false,   // one cfg send at a time, from any button
+  cfgSeq: 0,        // bumped when a send starts and when it ends; see poll()
 };
 
 // ── Token: fragment -> tab storage, then out of the address bar ──
@@ -220,7 +227,7 @@ function refreshPending() {
   $("read-pending").classList.toggle("is-pending", count > 0);
   $("apply").classList.toggle("has-pending", count > 0);
   if (!state.statusHeld) {
-    setStatus(count > 0 ? `有 ${count} 项改动，只在本页预览，还没发送` : "没有待发送的改动");
+    setStatus(count > 0 ? `有 ${count} 项改动，只在本页预览，还没发送` : "没有新改动，按上面的「应用到屏幕」会把当前设置全部重发");
   }
 }
 
@@ -233,17 +240,28 @@ function setStatus(text, detail, tone, hold) {
 
 // ── Cartridges and chips ─────────────────────────────────────────
 
+// Rows of five on wide screens, each on its own rail; page.css drops the rows on narrow ones
+const CARTS_PER_ROW = 5;
+
 function buildCartridges() {
   const holder = $("cartridges");
   const more = $("cart-more");
   const template = $("cart-template");
-  holder.style.setProperty("--carts", String(state.themes.length));
+  const tiles = [];
   for (const theme of state.themes) {
     const node = template.content.firstElementChild.cloneNode(true);
     const input = node.querySelector("input");
     const newer = needsNewerFirmware(theme);
     input.value = String(theme.id);
-    input.setAttribute("aria-label", `${cartNo(theme)} ${theme.name}${newer ? "，需新版固件" : ""}`);
+    const cart = {
+      theme, input,
+      button: node.querySelector(".cart__send"),
+      note: node.querySelector(".cart__note"),
+      sentTag: node.querySelector(".cart__sent"),
+      confirmTimer: 0,
+    };
+    state.carts.push(cart);
+    cart.button.addEventListener("click", () => sendTheme(cart));
     node.querySelector(".cart__no").textContent = cartNo(theme);
     node.querySelector(".cart__name").textContent = theme.name;
     node.querySelector(".cart__tagline").textContent = theme.tagline || "";
@@ -255,9 +273,63 @@ function buildCartridges() {
         setTheme(theme.id, true);
       }
     });
-    holder.insertBefore(node, more);
+    paintCart(cart);
+    tiles.push(node);
     const scene = theme.scenes[CART_SCENE] || theme.scenes[STAGE_SCENE];
     playScene(makePlayer(node.querySelector("canvas"), scene), scene);
+  }
+  tiles.push(more);
+  for (let i = 0; i < tiles.length; i += CARTS_PER_ROW) {
+    const row = document.createElement("div");
+    row.className = "dock__row";
+    row.append(...tiles.slice(i, i + CARTS_PER_ROW));
+    holder.append(row);
+  }
+}
+
+// Which cartridge was sent last comes from last_sent, unless that send never reached the serial
+// port (unsent). The page may say 已发送, never that the screen shows it.
+function isSentTheme(id) {
+  return state.statusSeen && state.baseline.theme === id && !state.unsent.includes("theme");
+}
+
+// Polls repaint every 3 s, so only touch the DOM when something changed
+function setAttr(node, name, value) {
+  if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+}
+
+function setCartButton(cart, text, spoken) {
+  if (cart.button.textContent !== text) cart.button.textContent = text;
+  setAttr(cart.button, "aria-label", spoken || `把 ${cartNo(cart.theme)} ${cart.theme.name} ${text}`);
+}
+
+function paintCart(cart) {
+  const { theme, input, button, sentTag } = cart;
+  const sent = isSentTheme(theme.id);
+  sentTag.hidden = !sent;
+  setAttr(input, "aria-label",
+    `${cartNo(theme)} ${theme.name}${needsNewerFirmware(theme) ? "，需新版固件" : ""}${sent ? "，已发送" : ""}`);
+  if (cart.confirmTimer || button.classList.contains("is-busy")) return;
+  setCartButton(cart, sent ? CART_RESEND : CART_SEND);
+}
+
+function paintCarts() {
+  for (const cart of state.carts) paintCart(cart);
+}
+
+// One line in the cartridge; the full text is in its tooltip and in #status
+function setCartNote(cart, tone, text, full) {
+  cart.note.textContent = text || "";
+  cart.note.dataset.tone = tone || "";
+  cart.note.title = full || "";
+}
+
+function clearCartNotes() {
+  for (const cart of state.carts) {
+    clearTimeout(cart.confirmTimer);
+    cart.confirmTimer = 0;
+    setCartNote(cart, "", "");
+    paintCart(cart);
   }
 }
 
@@ -462,6 +534,7 @@ const NO_TOKEN = {
 async function poll() {
   if (state.closed) return;
   try {
+    const seq = state.cfgSeq;
     const { status, data } = await api("/api/status");
     if (status === 401) {
       showClosed(NO_TOKEN);
@@ -470,15 +543,20 @@ async function poll() {
     if (status !== 200) throw new Error(String(status));
     state.fails = 0;
     state.status = data;
-    state.baseline = data.last_sent;
-    state.unsent = data.unsent;
-    if (!state.statusSeen) {
+    // A send that started or finished while this poll was out has a newer last_sent than this reply
+    const fresh = seq === state.cfgSeq && !state.sending;
+    if (fresh) {
+      state.baseline = data.last_sent;
+      state.unsent = data.unsent;
+    }
+    if (!state.statusSeen && fresh) {
       state.statusSeen = true;
       setTheme(themeById(data.last_sent.theme) ? data.last_sent.theme : DEFAULTS.theme, false);
       setRotation(data.last_sent.rotation);
       setBrightness(data.last_sent.brightness);
     }
     refreshPending();
+    paintCarts();
     paintLeds(data);
     paintSerial(data);
     paintDrawer(data);
@@ -503,35 +581,111 @@ function setBusy(button, busy) {
   button.disabled = busy || state.closed;
 }
 
-async function sendCfg(button, force) {
-  setBusy(button, true);
-  setStatus("发送中…如果后台没开，会先启动它", "", "", true);
-  try {
-    const { status, data } = await api("/api/cfg", { ...state.staged, force });
-    if (status === 200 && data.result === "sent") {
-      const sentTheme = data.changed && themeById(data.changed.theme);
-      const detail = needsNewerFirmware(sentTheme)
-        ? `如果屏幕没变化，或提示「主题 ${fallbackTheme().name}」，说明固件还不认识${sentTheme.name}，见下方「屏幕没变化，或样式不对？」。`
-        : "";
-      setStatus("已发送，请看屏幕确认", detail, "ok", true);
-    } else if (status === 200 && data.result === "saved_not_sent") {
-      setStatus(`已保存，${notSentHeadline(data.reason)}`, data.explain, "bad", true);
-    } else if (status === 200 && data.result === "no_change") {
-      setStatus("没有需要发送的改动", "", "", true);
-    } else {
-      setStatus("没有发送", data.error || `服务返回 ${status}`, "bad", true);
-    }
-    if (data.last_sent) {
-      state.baseline = data.last_sent;
-      state.unsent = data.unsent || [];
-      refreshPending();
-    }
-  } catch {
-    setStatus("没有发送", "连不上页面服务", "bad", true);
-    poll();
-  } finally {
-    setBusy(button, false);
+// Every button that sends a cfg line waits for the one in flight, so two sends never race. The
+// pressed one is only aria-disabled (the state.sending guard stops a second press): disabling it
+// would drop keyboard focus to <body> and lose a keyboard or screen-reader user's place.
+function setSending(button, busy) {
+  state.sending = busy;
+  for (const other of [$("apply"), $("resend"), ...state.carts.map((c) => c.button)]) {
+    other.disabled = state.closed || (busy && other !== button);
   }
+  button.classList.toggle("is-busy", busy);
+  if (busy) button.setAttribute("aria-disabled", "true");
+  else button.removeAttribute("aria-disabled");
+}
+
+function takeReply(data) {
+  if (!data || !data.last_sent) return;
+  state.baseline = data.last_sent;
+  state.unsent = data.unsent || [];
+  refreshPending();
+}
+
+// The first sentence of an explain line ("第一处断点：后台。…"), short enough for a cartridge
+function firstSentence(text) {
+  return (text || "").split("。")[0];
+}
+
+// What #status and, for a cartridge, its one-line note say about a /api/cfg reply
+function readCfgReply(status, data, body, cart, resent) {
+  if (status === 200 && data.result === "sent") {
+    const sentTheme = data.changed && themeById(data.changed.theme);
+    const newer = needsNewerFirmware(sentTheme);
+    const fallback = fallbackTheme().name;
+    const left = pendingKeys().length;
+    const detail = newer
+      ? `如果屏幕没变化，或提示「主题 ${fallback}」，说明固件还不认识${sentTheme.name}，见下方「屏幕没变化，或样式不对？」。`
+      : !cart && body.force
+        ? "当前设置已全部重发。屏幕本来就是这套时不会弹提示。"
+        : resent ? "屏幕本来就是这套时不会弹提示。" : "";
+    const leftLine = cart && left > 0 ? `还有 ${left} 项改动没发送，按上面的「应用到屏幕」发送。` : "";
+    return {
+      tone: "ok", head: "已发送，请看屏幕确认", detail: detail + leftLine, confirmed: true,
+      note: newer ? `请看屏幕，旧固件退回${fallback}` : "请看屏幕确认",
+    };
+  }
+  if (status === 200 && data.result === "saved_not_sent") {
+    const head = notSentHeadline(data.reason);
+    const reason = NO_DEVICE_REASONS.includes(data.reason) ? "" : firstSentence(data.explain);
+    return {
+      tone: "bad", head: `已保存，${head}`, detail: data.explain,
+      note: reason ? `${head}，${reason}` : head,
+    };
+  }
+  if (status === 200 && data.result === "no_change") {
+    return { tone: "", head: "没有需要发送的改动", detail: "", note: "没有需要发送的改动" };
+  }
+  const why = (data && data.error) || `服务返回 ${status}`;
+  return { tone: "bad", head: "没有发送", detail: why, note: `没有发送，${why}` };
+}
+
+// One cfg send, from the main button, the resend button, or a cartridge's (then cart is set). The
+// reply goes to #status and, for a cartridge, to its note and button too, so both places agree.
+async function postCfg(button, body, cart) {
+  if (state.sending || state.closed) return;
+  const resent = Boolean(cart) && isSentTheme(cart.theme.id);
+  clearCartNotes();
+  state.cfgSeq += 1;   // a poll that started before this send must not overwrite its reply
+  setSending(button, true);
+  if (cart) setCartButton(cart, "发送中…", `${cartNo(cart.theme)} ${cart.theme.name} 发送中`);
+  setStatus("发送中…如果后台没开，会先启动它", "", "", true);
+  let reply;
+  try {
+    const { status, data } = await api("/api/cfg", body);
+    takeReply(data);
+    reply = readCfgReply(status, data, body, cart, resent);
+  } catch {
+    reply = { tone: "bad", head: "没有发送", detail: "连不上页面服务", note: "没有发送，连不上页面服务", lost: true };
+  } finally {
+    state.cfgSeq += 1;
+    setSending(button, false);
+  }
+  setStatus(reply.head, reply.detail, reply.tone, true);
+  if (cart) {
+    setCartNote(cart, reply.tone, reply.note, [reply.head, reply.detail].filter(Boolean).join("\n"));
+    if (reply.confirmed && !state.closed) {
+      setCartButton(cart, "已发送", `${cartNo(cart.theme)} ${cart.theme.name} 已发送`);
+      cart.confirmTimer = setTimeout(() => {
+        cart.confirmTimer = 0;
+        paintCart(cart);
+      }, CART_CONFIRM_MS);
+    }
+  }
+  paintCarts();
+  if (reply.lost) poll();   // two misses in a row show the page as closed
+}
+
+function sendCfg(button, force) {
+  return postCfg(button, { ...state.staged, force });
+}
+
+// A cartridge's own button: stage it and send only its theme. force, because the page can't read
+// the board (old firmware's fallback, a reflash) and an explicit click must always reach it. Staged
+// rotation and brightness stay pending for the main button; serve.py still adds keys left unsent.
+function sendTheme(cart) {
+  if (state.sending || state.closed) return;
+  setTheme(cart.theme.id, true);
+  return postCfg(cart.button, { theme: cart.theme.id, force: true }, cart);
 }
 
 async function sendTest() {
@@ -598,7 +752,9 @@ function touch() {
 }
 
 function bindControls() {
-  $("apply").addEventListener("click", () => sendCfg($("apply"), false));
+  // The page can't read the board, which drifts after a reflash or an old firmware's fallback,
+  // so with nothing changed, applying resends everything instead of doing nothing.
+  $("apply").addEventListener("click", () => sendCfg($("apply"), pendingKeys().length === 0));
   $("resend").addEventListener("click", () => sendCfg($("resend"), true));
   $("test").addEventListener("click", sendTest);
   $("save-serial").addEventListener("click", saveSerial);

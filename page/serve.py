@@ -514,7 +514,7 @@ def first_break(uv_path, daemon_port, usb_ok, link_down) -> dict | None:
     if not usb_ok or (daemon_port is not None and link_down):
         return {"link": "usb", "explain": "第一处断点：USB。没有找到设备，插上 ESP32-C3，或在串口设备里指定端口。"}
     if daemon_port is None:
-        return {"link": "daemon", "explain": "第一处断点：后台没在运行。有改动时按「应用到屏幕」，或按「发送测试小人」，会尝试启动一次。"}
+        return {"link": "daemon", "explain": "第一处断点：后台没在运行。按任一发送按钮，或「发送测试小人」，会尝试启动一次。"}
     return None
 
 

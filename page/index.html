@@ -51,7 +51,7 @@
   </h1>
 
   <div class="plaque plaque--left">
-    <p class="subline">先在这里预览，按「应用到屏幕」才会发送，结果请看实物屏幕确认。</p>
+    <p class="subline">点卡带只预览；卡带下的按钮发这个样式，下面的「应用到屏幕」发送全部改动。结果请看实物屏幕确认。</p>
     <div class="actions">
       <button type="button" class="key key--primary" id="apply">应用到屏幕</button>
       <button type="button" class="key" id="test">发送测试小人</button>
@@ -115,8 +115,7 @@
 <section class="dock-section" aria-labelledby="dock-title">
   <h2 class="section-title" id="dock-title">主题卡带 // CARTRIDGES</h2>
   <div class="dock">
-    <div class="dock__rail" aria-hidden="true"></div>
-    <!-- Cartridges come from previews/manifest.json and go in before the last tile -->
+    <!-- Cartridges come from previews/manifest.json; page.js puts them and the last tile into rows -->
     <div class="dock__cards" id="cartridges" role="radiogroup" aria-labelledby="dock-title">
       <div class="cart cart--more" id="cart-more" aria-hidden="true">
         <span class="cart__plus">+</span>
@@ -215,22 +214,31 @@
   </div>
 </div>
 
+<!-- The radio covers the whole cartridge, so a click anywhere stages it; the send button and its
+     note sit above the radio and stay outside the label, which may not hold another control -->
 <template id="cart-template">
-  <label class="cart cart--real">
-    <input type="radio" name="theme">
-    <span class="cart__window"><canvas width="240" height="240"></canvas></span>
-    <span class="cart__label">
-      <span class="cart__no"></span>
-      <span class="cart__name"></span>
-      <span class="cart__tagline"></span>
-      <span class="cart__req" hidden>需新版固件</span>
-    </span>
+  <div class="cart cart--real">
+    <label class="cart__pick">
+      <input type="radio" name="theme">
+      <span class="cart__window"><canvas width="240" height="240"></canvas></span>
+      <span class="cart__label">
+        <span class="cart__no"></span>
+        <span class="cart__name"></span>
+        <span class="cart__tagline"></span>
+        <span class="cart__tags">
+          <span class="cart__req" hidden>需新版固件</span>
+          <span class="cart__sent" hidden>已发送</span>
+        </span>
+      </span>
+    </label>
+    <p class="cart__note" aria-live="polite"></p>
+    <button type="button" class="key key--small cart__send">应用到屏幕</button>
     <span class="cart__grip" aria-hidden="true"></span>
     <span class="bracket bracket--tl" aria-hidden="true"></span>
     <span class="bracket bracket--tr" aria-hidden="true"></span>
     <span class="bracket bracket--bl" aria-hidden="true"></span>
     <span class="bracket bracket--br" aria-hidden="true"></span>
-  </label>
+  </div>
 </template>
 
 </body>
