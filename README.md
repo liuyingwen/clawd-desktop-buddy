@@ -132,4 +132,4 @@ uv run page/serve.py
 
 ## 许可证
 
-[Apache License 2.0](LICENSE)。Copyright 2026 刘英文。归属说明见 [NOTICE](NOTICE)。
+[Apache License 2.0](LICENSE)。归属说明见 [NOTICE](NOTICE)。
