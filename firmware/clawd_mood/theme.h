@@ -5,7 +5,8 @@
 #include <U8g2_for_Adafruit_GFX.h>
 
 // Ids are append-only and never reused: {"cfg":{"theme":N}} and NVS carry them. THEMES[0] is theme 1.
-#define THEME_TABLE(X) X(THEME_CLASSIC) X(THEME_NOIR) X(THEME_PHOSPHOR) X(THEME_ARCADE) X(THEME_STAGE)
+#define THEME_TABLE(X) X(THEME_CLASSIC) X(THEME_NOIR) X(THEME_PHOSPHOR) X(THEME_ARCADE) X(THEME_STAGE) \
+                        X(THEME_METRO) X(THEME_TOWER) X(THEME_AQUARIUM)
 
 #define RGB(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
 

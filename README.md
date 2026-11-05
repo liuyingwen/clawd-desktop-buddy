@@ -18,6 +18,11 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Code
   <tr>
     <td align="center"><img src="images/themes/arcade.gif" width="240" alt="街机" /><br /><b>04 街机</b></td>
     <td align="center"><img src="images/themes/stage.gif" width="240" alt="剧场" /><br /><b>05 剧场</b></td>
+    <td align="center"><img src="images/themes/metro.gif" width="240" alt="地铁线路" /><br /><b>06 地铁线路</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/themes/tower.gif" width="240" alt="深夜公寓" /><br /><b>07 深夜公寓</b></td>
+    <td align="center"><img src="images/themes/aquarium.gif" width="240" alt="水族箱" /><br /><b>08 水族箱</b></td>
   </tr>
 </table>
 
@@ -102,7 +107,7 @@ uv run page/serve.py
 
 ![配置页](images/config-page.png)
 
-主题 3–5 需要较新的固件，选了没反应就让 agent 重烧一次。
+主题 3–8 需要较新的固件，选了没反应就让 agent 重烧一次。
 
 ## 屏幕上显示什么
 
@@ -123,7 +128,7 @@ uv run page/serve.py
 ## 已知限制
 
 - Windows 和 Linux 还没在真机上完整跑过，试过的话欢迎开 issue。
-- 主题、方向和亮度设置还没在真机上确认过，主题 3–5 只在预览里看过。
+- 主题、方向和亮度设置还没在真机上确认过，主题 3–8 只在预览里看过。
 
 ## 许可证
 

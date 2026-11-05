@@ -199,6 +199,126 @@
           "h": 240
         }
       }
+    },
+    {
+      "id": 6,
+      "key": "metro",
+      "name": "地铁线路",
+      "tagline": "每个会话是线路图上的一站",
+      "min_fw": 3,
+      "glow": "#e2412b",
+      "state_colors": [
+        "#181c20",
+        "#296dde",
+        "#299d52",
+        "#e69500",
+        "#10a594",
+        "#e64029",
+        "#9c958b"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-6/squad.png",
+          "frames": 144,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-6/solo.png",
+          "frames": 60,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-6/empty.png",
+          "frames": 12,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 7,
+      "key": "tower",
+      "name": "深夜公寓",
+      "tagline": "每扇亮灯的窗都是一个会话",
+      "min_fw": 3,
+      "glow": "#ff5fa2",
+      "state_colors": [
+        "#7b5929",
+        "#6aaaff",
+        "#ffca6a",
+        "#ffb200",
+        "#39c67b",
+        "#ff484a",
+        "#3961cd"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-7/squad.png",
+          "frames": 72,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-7/solo.png",
+          "frames": 60,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-7/empty.png",
+          "frames": 12,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
+    },
+    {
+      "id": 8,
+      "key": "aquarium",
+      "name": "水族箱",
+      "tagline": "小队在鱼缸里各游各的",
+      "min_fw": 3,
+      "glow": "#2bb3c0",
+      "state_colors": [
+        "#94e6ee",
+        "#3969ff",
+        "#299d52",
+        "#ffb200",
+        "#f6faff",
+        "#ff484a",
+        "#5a7d8b"
+      ],
+      "scenes": {
+        "squad": {
+          "file": "theme-8/squad.png",
+          "frames": 72,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "solo": {
+          "file": "theme-8/solo.png",
+          "frames": 180,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        },
+        "empty": {
+          "file": "theme-8/empty.png",
+          "frames": 36,
+          "fps": 10,
+          "w": 240,
+          "h": 240
+        }
+      }
     }
   ]
 }
