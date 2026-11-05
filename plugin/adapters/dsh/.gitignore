@@ -1,3 +1,4 @@
 # copied in by prepack so the tarball can start the daemon on its own
 scripts/
+# old local pack output; pack.mjs now writes to the repo-level dist/, which is committed
 dist/

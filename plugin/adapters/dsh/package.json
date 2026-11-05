@@ -17,6 +17,6 @@
   },
   "scripts": {
     "prepack": "mkdir -p scripts && cp ../../scripts/hook.py ../../scripts/daemon.py scripts/",
-    "pack:tarball": "mkdir -p dist && npm pack --pack-destination dist"
+    "pack:tarball": "node pack.mjs"
   }
 }

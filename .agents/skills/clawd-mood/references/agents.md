@@ -74,15 +74,19 @@ WorkBuddy 桌面版：命令前加 `CODEBUDDY_CONFIG_DIR=~/.workbuddy`，装完�
 
 两种接法二选一，不要同装，否则每个事件推两次。
 
-**原生插件（推荐，桌面版只能用这种）**：
+**原生插件（推荐，桌面版只能用这种）**：打好的包在仓库的 `dist/` 里，按版本命名，不用自己打包，也不用克隆仓库。把最新版本的 GitHub 地址给用户：
 
-```bash
-cd plugin/adapters/dsh && npm run pack:tarball   # 产出 dist/clawd-mood-dsh-<版本>.tgz
+```
+https://raw.githubusercontent.com/liuyingwen/clawd-desktop-buddy/main/dist/clawd-mood-dsh-0.3.0.tgz
 ```
 
-桌面版：请用户在插件管理里填这个 `.tgz` 的绝对路径安装。命令行 / web 版：`dsh plugin --profile web add <tgz 绝对路径>`，然后重启 dsh。`dsh` 命令行不能操作桌面版的 `desktop` profile。
+版本以仓库 `dist/` 里最新的 `clawd-mood-dsh-<版本>.tgz` 为准（本地有仓库时 `ls <repo>/dist`）。
 
-- 更新：重新打包、重新安装（包里带着 hook.py / daemon.py 的副本）
+- 桌面版：请用户在插件管理里粘贴这个地址安装。`dsh` 命令行不能操作桌面版的 `desktop` profile，只能用户自己点
+- 命令行 / web 版：`dsh plugin --profile web add <上面的地址>`，然后重启 dsh
+- 没网或想用本地文件：填 `<repo>/dist/clawd-mood-dsh-<版本>.tgz` 的绝对路径也行
+
+- 更新：用新版本的地址再装一次，会替换旧版。不要指望同一个地址自己更新：每个版本的文件发布后不再改，pnpm 也会把同一地址的新内容当成被篡改而拒绝
 - 卸载：桌面版在插件管理里移除；命令行 `dsh plugin --profile web remove clawd-mood-dsh`
 
 **hook 桥接（只用于命令行 / web 版）**：
