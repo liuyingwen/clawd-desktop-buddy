@@ -566,8 +566,8 @@ static void page(uint8_t first, uint8_t count, int16_t, int16_t, unsigned long n
 // Attract mode: the title, a slow parade of the whole cast, a blinking call to plug an agent in
 static void attract(unsigned long now) {
   sky(now);
-  textAt("CLAWD", 77, 32, 3, NIGHT);
-  textAt("CLAWD", 75, 30, 3, MAGENTA);
+  textAt("MIQIPET", 60, 32, 3, NIGHT);
+  textAt("MIQIPET", 58, 30, 3, MAGENTA);
   textAt("INVADERS", 52, 62, 3, NIGHT);
   textAt("INVADERS", 50, 60, 3, CYAN);
   const uint8_t u = 3;

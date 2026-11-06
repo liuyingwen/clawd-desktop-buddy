@@ -170,10 +170,10 @@ static bool anyAlerting(Mood m) {
   return false;
 }
 
-// "clawd@desk:~$ squad", a cursor, and the session count; a blinking mark while anyone needs you
+// "miqi@desk:~$ squad", a cursor, and the session count; a blinking mark while anyone needs you
 static void statusLine(int16_t ox, unsigned long now) {
   int16_t x = ox + 7;
-  x += text("clawd@desk:~$ ", x, 12, MID);
+  x += text("miqi@desk:~$ ", x, 12, MID);
   x += text("squad", x, 12, HI);
   cursorBlock(x + 2, 12, HI, now);
   char n[12];
@@ -483,8 +483,8 @@ static void idleScreen(unsigned long now) {
   };
   int16_t r = typed(0);
   if (r >= 0) {
-    char head[12] = "CLAWD-MOOD";
-    head[min((int)(r / 12), 10)] = 0;
+    char head[12] = "MIQIPET";
+    head[min((int)(r / 12), 7)] = 0;
     small(head, x, 14, HI, 2);
     canvas.drawFastHLine(x, 34, min((int)r, DISP_W - 2 * x), LO);
   }
