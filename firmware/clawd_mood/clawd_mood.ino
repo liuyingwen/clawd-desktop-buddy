@@ -12,6 +12,7 @@
 #include <U8g2_for_Adafruit_GFX.h>
 #include <Preferences.h>
 #include "theme.h"
+#include "ble_link.h"
 
 #define TFT_CS  4
 #define TFT_DC  1
@@ -62,8 +63,15 @@ char urgentId[9] = "";              // session the screen is holding on
 unsigned long urgentUntilMs = 0;
 
 unsigned long lastFrameMs = 0;
-char lineBuf[LINE_MAX];
-size_t lineLen = 0;
+
+// Serial and Bluetooth each get their own buffer: a line half-received on one must not
+// swallow bytes from the other.
+struct LineReader {
+  char buf[LINE_MAX];
+  size_t len = 0;
+  void feed(char c);
+};
+LineReader serialLines, bleLines;
 
 uint16_t stateColor(Mood m) { return T->pal.state[m < MOOD_UNKNOWN ? m : MOOD_IDLE]; }
 
@@ -408,16 +416,25 @@ void handleLine(const char* line) {
   s.quiet = quiet;
 }
 
+void LineReader::feed(char c) {
+  if (c == '\n') {
+    buf[len] = 0;
+    handleLine(buf);
+    len = 0;
+  } else if (c != '\r' && len < LINE_MAX - 1) {
+    buf[len++] = c;
+  }
+}
+
 void pollSerial() {
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n') {
-      lineBuf[lineLen] = 0;
-      handleLine(lineBuf);
-      lineLen = 0;
-    } else if (c != '\r' && lineLen < LINE_MAX - 1) {
-      lineBuf[lineLen++] = c;
-    }
+  while (Serial.available()) serialLines.feed(Serial.read());
+}
+
+void pollBle() {
+  char chunk[128];
+  size_t n;
+  while ((n = bleRead(chunk, sizeof(chunk))) > 0) {
+    for (size_t i = 0; i < n; i++) bleLines.feed(chunk[i]);
   }
 }
 
@@ -802,9 +819,11 @@ void profileFrame(unsigned long renderUs, unsigned long pushUs, unsigned long sl
   profilePushMax = max(profilePushMax, pushUs);
   if (renderUs + pushUs > slotMs * 1000) profileLate++;
   if (millis() - profileSinceMs < PROFILE_EVERY_MS) return;
-  Serial.printf("[profile] %s frames=%lu late=%lu render avg=%lu max=%lu push avg=%lu max=%lu\n", T->key,
+  Serial.printf("[profile] %s frames=%lu late=%lu render avg=%lu max=%lu push avg=%lu max=%lu"
+                " heap free=%lu min=%lu ble=%d\n", T->key,
                 profileFrames, profileLate, profileRenderSum / profileFrames, profileRenderMax,
-                profilePushSum / profileFrames, profilePushMax);
+                profilePushSum / profileFrames, profilePushMax, (unsigned long)ESP.getFreeHeap(),
+                (unsigned long)ESP.getMinFreeHeap(), bleConnected());
   profileSinceMs = millis();
   profileFrames = profileLate = profileRenderSum = profilePushSum = profileRenderMax = profilePushMax = 0;
 }
@@ -871,10 +890,12 @@ void setup() {
   labelFont.setFont(u8g2_font_wqy12_t_gb2312b);  // resets font mode, so set it first
   labelFont.setFontMode(1);
   if (!canvas.getBuffer()) Serial.println("[warn] no RAM for frame buffer");
+  bleBegin();   // after the frame buffer: it needs 115 KB in one piece, the radio doesn't
 }
 
 void loop() {
   pollSerial();
+  pollBle();
   tickSessions();
   tickPaging();
   tickSettingsSave();
