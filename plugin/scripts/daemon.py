@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pyserial>=3.5"]
+# dependencies = ["pyserial>=3.5", "bleak>=1.0"]
 # ///
 """clawd-mood daemon — TCP server forwarding state to ESP32 via USB CDC.
 
@@ -13,9 +13,19 @@ macOS / Linux / Windows.
 Survives the board being unplugged: messages are dropped while it is gone, and
 later messages re-detect and reopen the port. Exits only if there is no device
 at startup. Stays compatible with Python 3.9 (DeepSeek Harness runs python3).
+
+With no board on USB it falls back to Bluetooth LE (bleak), so the board can sit
+on any charger. See docs/superpowers/specs/2026-11-05-ble-transport-design.md.
+
+A client whose first line is {"sub":...} stays connected and gets a copy of every
+line, after the latest line of every session and subagent heard from in the last
+30 minutes: that is how the desktop pet sees what the board sees. With
+CLAWD_MOOD_VIEWER=1 the daemon runs without any board, for it.
 """
 
+import asyncio
 import atexit
+import collections
 import errno
 import json
 import os
@@ -23,6 +33,7 @@ import signal
 import socket
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -45,9 +56,25 @@ RECONNECT_INTERVAL_S = 3.0
 # SessionStart start a second daemon.
 LISTEN_BACKLOG = 64
 NO_DEVICE_MESSAGE = (
-    "No ESP32-like USB CDC device found. Plug it in or set "
+    "No ESP32-like USB CDC device found and no clawd-mood board over Bluetooth. Plug it in or set "
     "CLAWD_MOOD_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
 )
+
+# Must match firmware/clawd_mood/ble_link.h.
+BLE_SERVICE_UUID = "ee97aa6d-6973-4f5a-9148-c26f84eb0f84"
+BLE_RX_UUID = "f91d93a9-1bf8-4ae7-b4ac-31fcaa05cebc"
+BLE_SCAN_S = 10.0
+BLE_RETRY_S = 5.0
+# Lines kept while the board is out of range, flushed in order on reconnect: replaying a
+# session's last states (and its SessionEnd) beats leaving it stuck until it expires.
+BLE_BACKLOG = 100
+KNOWN_BOARDS_MAX = 8
+
+# A new subscriber first gets the latest line of every session (and subagent) it missed, as far
+# back as the firmware keeps a quiet session. Per session, not the last N lines: busy agents push
+# hundreds of tool lines a minute, and a quiet session's only line would scroll out.
+SUB_REPLAY_S = 30 * 60
+SUB_REPLAY_MAX = 300   # entries; the firmware shows 12 sessions
 
 _warned: set[str] = set()
 
@@ -72,20 +99,24 @@ def config_path() -> Path:
     return Path.home() / ".clawd-mood" / "config.json"
 
 
-def configured_port() -> Optional[str]:
-    """serial_port from the config file. A config problem must never stop the daemon."""
+def configured(key: str) -> Optional[str]:
+    """A string setting from the config file. A config problem must never stop the daemon."""
     try:
         path = config_path()
         config = json.loads(path.read_text(encoding="utf-8"))
-        value = config.get("serial_port")
+        value = config.get(key)
         if value is not None and not isinstance(value, str):
-            raise ValueError(f"serial_port is not a string: {value!r}")
+            raise ValueError(f"{key} is not a string: {value!r}")
         return value or None
     except FileNotFoundError:
         return None
     except Exception as e:
         warn_once(f"ignoring config: {e}")
         return None
+
+
+def configured_port() -> Optional[str]:
+    return configured("serial_port")
 
 
 def is_candidate(p) -> bool:
@@ -134,6 +165,171 @@ def is_espressif(port: str) -> bool:
         return False
 
 
+def boards_path() -> Path:
+    """Boards this daemon has seen on USB. Its own file: the config file belongs to the page."""
+    return config_path().with_name("boards.json")
+
+
+def ble_name_for(serial_number: Optional[str]) -> Optional[str]:
+    """The name an ESP32-C3 advertises, from the MAC its USB port reports as serial number.
+
+    The firmware names itself after the Bluetooth MAC, which is the base MAC plus 2.
+    """
+    try:
+        mac = int((serial_number or "").replace(":", ""), 16)
+    except ValueError:
+        return None
+    if not serial_number or serial_number.count(":") != 5:
+        return None
+    bt = (mac + 2) & 0xFFFFFFFFFFFF
+    return f"clawd-mood-{(bt >> 8) & 0xFF:02X}{bt & 0xFF:02X}"
+
+
+def known_boards() -> list:
+    try:
+        names = json.loads(boards_path().read_text(encoding="utf-8")).get("ble_names", [])
+        return [n for n in names if isinstance(n, str)]
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        warn_once(f"ignoring {boards_path()}: {e}")
+        return []
+
+
+def remember_board(port: str) -> None:
+    """Pin Bluetooth to the boards plugged in here, so it never picks a neighbour's."""
+    try:
+        info = next((p for p in list_ports.comports() if p.device == port), None)
+        if info is None or info.vid != ESPRESSIF_VID:
+            return
+        name = ble_name_for(info.serial_number)
+        names = known_boards()
+        if name is None or (names and names[0] == name):
+            return
+        names = [name] + [n for n in names if n != name][: KNOWN_BOARDS_MAX - 1]
+        path = boards_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"ble_names": names}) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception as e:
+        warn_once(f"cannot remember board: {e}")
+
+
+def ble_wanted() -> list:
+    """Names Bluetooth may connect to, most recent first.
+
+    Never any board in range: that could be a neighbour's, and scanning for nothing would
+    ask macOS users for Bluetooth access they never wanted.
+    """
+    pinned = os.environ.get("CLAWD_MOOD_BLE_NAME") or configured("ble_name")
+    return [pinned] if pinned else known_boards()
+
+
+def ble_enabled() -> bool:
+    if os.environ.get("CLAWD_MOOD_BLE", "1") == "0" or not ble_wanted():
+        return False
+    try:
+        import bleak  # noqa: F401  only loaded when there is no board on USB
+    except Exception as e:
+        warn_once(f"Bluetooth unavailable: {e}")
+        return False
+    return True
+
+
+class BleLink:
+    """The board over Bluetooth LE. bleak is asyncio, so it runs on its own thread and loop."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        self.pending: collections.deque = collections.deque(maxlen=BLE_BACKLOG)
+        self.wake: Optional[asyncio.Event] = None
+        self.connected = threading.Event()
+        self.first_scan = threading.Event()  # set once the first scan finished, found or not
+        self.found = False
+        self.task: Optional[asyncio.Future] = None
+        threading.Thread(target=self._thread, name="ble", daemon=True).start()
+
+    def _thread(self) -> None:
+        asyncio.set_event_loop(self.loop)
+        self.wake = asyncio.Event()
+        self.task = self.loop.create_task(self._run())
+        try:
+            self.loop.run_until_complete(self.task)
+        except asyncio.CancelledError:
+            pass
+
+    def send(self, line: str) -> None:
+        self.loop.call_soon_threadsafe(self._push, line)
+
+    def _push(self, line: str) -> None:
+        self.pending.append(line)
+        self.wake.set()
+
+    def stop(self) -> None:
+        if self.task is not None:
+            self.loop.call_soon_threadsafe(self.task.cancel)
+
+    async def _find(self):
+        from bleak import BleakScanner
+
+        wanted = ble_wanted()
+
+        def match(device, adv) -> bool:
+            if BLE_SERVICE_UUID not in [u.lower() for u in adv.service_uuids]:
+                return False
+            # The name comes in the scan response, so a wanted board may match a moment later.
+            return (adv.local_name or device.name) in wanted
+
+        return await BleakScanner.find_device_by_filter(match, timeout=BLE_SCAN_S)
+
+    async def _run(self) -> None:
+        from bleak import BleakClient
+
+        while True:
+            try:
+                device = await self._find()
+            except Exception as e:  # Bluetooth off, or no permission to use it
+                warn_once(f"Bluetooth scan failed: {e}")
+                device = None
+            self.found = self.found or device is not None
+            self.first_scan.set()
+            if device is None:
+                await asyncio.sleep(BLE_RETRY_S)
+                continue
+            try:
+                async with BleakClient(device, disconnected_callback=lambda _: self.wake.set()) as client:
+                    self.connected.set()
+                    print(f"  Bluetooth: connected to {device.name or device.address}"
+                          f"{f', sending {len(self.pending)} queued' if self.pending else ''}")
+                    _warned.clear()  # the next drop should be logged again
+                    await self._pump(client)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                warn_once(f"Bluetooth: {e}")
+            if self.connected.is_set():
+                self.connected.clear()
+                print("  !! Bluetooth: disconnected; queueing until it is back", file=sys.stderr)
+            await asyncio.sleep(1.0)
+
+    async def _pump(self, client) -> None:
+        chunk = max(20, client.mtu_size - 3)  # one ATT write carries MTU - 3 bytes
+        while client.is_connected:
+            if not self.pending:
+                self.wake.clear()
+                await self.wake.wait()
+                continue
+            line = self.pending[0]
+            data = (line + "\n").encode()
+            for i in range(0, len(data), chunk):
+                # Acknowledged writes: without a response, a line written as the link dies is
+                # lost silently. A failed write keeps the line queued; the board drops a torn one.
+                await client.write_gatt_char(BLE_RX_UUID, data[i:i + chunk], response=True)
+            self.pending.popleft()
+            print(f"  -> {line} (bt)")
+
+
 def open_serial(port: str) -> serial.Serial:
     ser = serial.Serial(
         port, BAUD_RATE, timeout=1, dsrdtr=False, rtscts=False,
@@ -160,26 +356,38 @@ def open_serial(port: str) -> serial.Serial:
 class SerialLink:
     """The serial port, which can vanish and come back while the daemon runs."""
 
-    def __init__(self, port: str) -> None:
-        self.ser: Optional[serial.Serial] = open_serial(port)
+    def __init__(self, port: Optional[str], ble: Optional[BleLink] = None) -> None:
+        self.ser: Optional[serial.Serial] = open_serial(port) if port else None
+        if port:
+            remember_board(port)
         # Once on an ESP32, wait for one to come back. Falling back to the other board
         # left plugged in would succeed and then keep us there for good.
-        self.espressif_only = is_espressif(port)
+        self.espressif_only = is_espressif(port) if port else True
         self.retry_at = 0.0
         self.dropped = 0
+        self.ble = ble  # takes over while there is no board on USB
 
     def forward(self, line: str) -> None:
         if self.ser is None and not self._reopen():
-            self.dropped += 1
+            self._fallback(line)
             return
         if not self._write(line):
             # An unplug nobody wrote through leaves a dead handle while the board may already
             # be back, so try once now instead of after the reconnect interval.
             self.retry_at = 0.0
             if not (self._reopen() and self._write(line)):
-                self.dropped += 1
+                self._fallback(line)
                 return
         print(f"  -> {line}")
+
+    def _fallback(self, line: str) -> None:
+        if self.ble is None and ble_enabled():
+            print("  Bluetooth: no board on USB, looking for one nearby")
+            self.ble = BleLink()
+        if self.ble is not None:
+            self.ble.send(line)  # logged when it is actually written
+        else:
+            self.dropped += 1
 
     def _write(self, line: str) -> bool:
         try:
@@ -217,9 +425,83 @@ class SerialLink:
             self.retry_at = time.monotonic() + RECONNECT_INTERVAL_S
             return False
         print(f"  Serial: {port} is back, {self.dropped} message(s) were dropped")
+        remember_board(port)
+        if self.ble is not None:  # the board is on USB again: the cable wins
+            self.ble.stop()
+            self.ble = None
+            print("  Bluetooth: stopped, using USB")
         self.dropped = 0
         _warned.clear()  # the next unplug should be logged again
         return True
+
+
+class Subscribers:
+    """Connections that asked for a copy of every line (the desktop pet).
+
+    Sends never block: the accept loop is serial, so a subscriber that stops reading is dropped
+    rather than waited for. It reconnects and catches up from the replay buffer.
+    """
+
+    def __init__(self) -> None:
+        self.conns: list = []
+        # (session, agent or None) -> (monotonic time, line), oldest first. Only to replay: the
+        # lines themselves are still forwarded untouched.
+        self.latest: dict = {}
+
+    def add(self, conn: socket.socket) -> None:
+        conn.setblocking(False)
+        horizon = time.monotonic() - SUB_REPLAY_S
+        for at, line in list(self.latest.values()):
+            if at >= horizon and not self._send(conn, line):
+                return
+        self.conns.append(conn)
+        print(f"  viewer connected ({len(self.conns)})")
+
+    def remember(self, line: str, obj) -> None:
+        if not isinstance(obj, dict) or "cfg" in obj:
+            return   # settings are the board's, not a session's
+        session = str(obj.get("session") or "default")
+        agent = obj.get("agent")
+        if obj.get("end"):
+            for key in [k for k in self.latest if k[0] == session]:
+                del self.latest[key]
+            return
+        key = (session, str(agent) if agent else None)
+        self.latest.pop(key, None)   # re-insert: the dict stays in order of the last line
+        if agent and obj.get("gone"):
+            return
+        self.latest[key] = (time.monotonic(), line)
+        while len(self.latest) > SUB_REPLAY_MAX:
+            del self.latest[next(iter(self.latest))]
+
+    def broadcast(self, line: str, obj=None) -> None:
+        self.remember(line, obj)
+        for conn in list(self.conns):
+            if not self._send(conn, line):
+                self.conns.remove(conn)
+                print(f"  viewer gone ({len(self.conns)})")
+
+    @staticmethod
+    def _send(conn: socket.socket, line: str) -> bool:
+        data = (line + "\n").encode()
+        try:
+            if conn.send(data) == len(data):
+                return True
+        except OSError:  # includes BlockingIOError: its buffer is full, it is not reading
+            pass
+        try:
+            conn.close()
+        except OSError:
+            pass
+        return False
+
+
+def is_subscription(line: str) -> bool:
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(obj, dict) and "sub" in obj
 
 
 def bind_listen(preferred: int, env_forced: bool) -> tuple[socket.socket, int]:
@@ -291,19 +573,30 @@ def main() -> None:
     PORTFILE.write_text(str(actual_port))
     atexit.register(remove_own_portfile, actual_port)
 
+    # Started for the desktop pet: no board is fine, the pet is the screen
+    viewer = os.environ.get("CLAWD_MOOD_VIEWER") == "1"
     serial_port = detect_port()
-    if serial_port is None:
+    ble = None
+    if serial_port is None and ble_enabled():
+        ble = BleLink()
+        if not viewer:
+            # Same rule as USB: no board at startup, no daemon. The first scan decides.
+            ble.first_scan.wait(BLE_SCAN_S + 5)
+            if not ble.found:
+                sys.exit(NO_DEVICE_MESSAGE)
+    if serial_port is None and ble is None and not viewer:
         sys.exit(NO_DEVICE_MESSAGE)
     try:
-        link = SerialLink(serial_port)
+        link = SerialLink(serial_port, ble)
     except Exception as e:
         sys.exit(f"Cannot open {serial_port}: {e}")
     print("clawd-mood daemon started")
     print(f"  TCP:    127.0.0.1:{actual_port}")
     print(f"  Portfile: {PORTFILE}")
-    print(f"  Serial: {serial_port}")
+    print(f"  Serial: {serial_port or ('none, using Bluetooth' if ble else 'none, viewer only')}")
     print("  Ready!")
 
+    subscribers = Subscribers()
     while True:
         try:
             conn, _ = server.accept()
@@ -311,16 +604,19 @@ def main() -> None:
             print(f"  !! accept failed: {e}", file=sys.stderr)
             time.sleep(0.1)  # don't spin if it keeps failing, e.g. out of file descriptors
             continue
+        lines = [line.strip() for line in read_lines(conn)]
+        lines = [line for line in lines if line]
+        if lines and is_subscription(lines[0]):
+            subscribers.add(conn)  # stays open; anything after the request is ignored
+            continue
         with conn:
-            for line in read_lines(conn):
-                line = line.strip()
-                if not line:
-                    continue
+            for line in lines:
                 try:
-                    json.loads(line)
+                    obj = json.loads(line)
                 except json.JSONDecodeError:
                     print(f"  !! bad JSON: {line}", file=sys.stderr)
                     continue
+                subscribers.broadcast(line, obj)
                 link.forward(line)
 
 
