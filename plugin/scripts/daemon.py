@@ -19,8 +19,8 @@ on any charger. See docs/superpowers/specs/2026-11-05-ble-transport-design.md.
 
 A client whose first line is {"sub":...} stays connected and gets a copy of every
 line, after the latest line of every session and subagent heard from in the last
-30 minutes: that is how the desktop pet sees what the board sees. With
-CLAWD_MOOD_VIEWER=1 the daemon runs without any board, for it.
+30 minutes: anything that wants to see what the board sees can subscribe. With
+CLAWD_MOOD_KEEP_RUNNING=1 the daemon runs without any board, for subscribers.
 """
 
 import asyncio
@@ -436,7 +436,7 @@ class SerialLink:
 
 
 class Subscribers:
-    """Connections that asked for a copy of every line (the desktop pet).
+    """Connections that asked for a copy of every line.
 
     Sends never block: the accept loop is serial, so a subscriber that stops reading is dropped
     rather than waited for. It reconnects and catches up from the replay buffer.
@@ -455,7 +455,7 @@ class Subscribers:
             if at >= horizon and not self._send(conn, line):
                 return
         self.conns.append(conn)
-        print(f"  viewer connected ({len(self.conns)})")
+        print(f"  subscriber connected ({len(self.conns)})")
 
     def remember(self, line: str, obj) -> None:
         if not isinstance(obj, dict) or "cfg" in obj:
@@ -479,7 +479,7 @@ class Subscribers:
         for conn in list(self.conns):
             if not self._send(conn, line):
                 self.conns.remove(conn)
-                print(f"  viewer gone ({len(self.conns)})")
+                print(f"  subscriber gone ({len(self.conns)})")
 
     @staticmethod
     def _send(conn: socket.socket, line: str) -> bool:
@@ -573,18 +573,18 @@ def main() -> None:
     PORTFILE.write_text(str(actual_port))
     atexit.register(remove_own_portfile, actual_port)
 
-    # Started for the desktop pet: no board is fine, the pet is the screen
-    viewer = os.environ.get("CLAWD_MOOD_VIEWER") == "1"
+    # Started for a subscriber: no board is fine
+    keep_running = os.environ.get("CLAWD_MOOD_KEEP_RUNNING") == "1"
     serial_port = detect_port()
     ble = None
     if serial_port is None and ble_enabled():
         ble = BleLink()
-        if not viewer:
+        if not keep_running:
             # Same rule as USB: no board at startup, no daemon. The first scan decides.
             ble.first_scan.wait(BLE_SCAN_S + 5)
             if not ble.found:
                 sys.exit(NO_DEVICE_MESSAGE)
-    if serial_port is None and ble is None and not viewer:
+    if serial_port is None and ble is None and not keep_running:
         sys.exit(NO_DEVICE_MESSAGE)
     try:
         link = SerialLink(serial_port, ble)
@@ -593,7 +593,7 @@ def main() -> None:
     print("clawd-mood daemon started")
     print(f"  TCP:    127.0.0.1:{actual_port}")
     print(f"  Portfile: {PORTFILE}")
-    print(f"  Serial: {serial_port or ('none, using Bluetooth' if ble else 'none, viewer only')}")
+    print(f"  Serial: {serial_port or ('none, using Bluetooth' if ble else 'none, subscribers only')}")
     print("  Ready!")
 
     subscribers = Subscribers()
