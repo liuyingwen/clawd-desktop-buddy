@@ -868,7 +868,7 @@ void setup() {
   tft.setRotation(rotation);
   canvas.setTextWrap(false);      // a tag past the right edge mid-slide would land on the left one
   labelFont.begin(canvas);
-  labelFont.setFont(u8g2_font_wqy12_t_gb2312);   // resets font mode, so set it first
+  labelFont.setFont(u8g2_font_wqy12_t_gb2312b);  // resets font mode, so set it first
   labelFont.setFontMode(1);
   if (!canvas.getBuffer()) Serial.println("[warn] no RAM for frame buffer");
 }

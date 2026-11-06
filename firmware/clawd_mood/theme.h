@@ -148,7 +148,7 @@ struct Session {
 
 extern GFXcanvas16 canvas;                 // the frame, DISP_W x DISP_H, pushed whole every frame
 extern const Theme* T;                     // the theme drawing now
-extern U8G2_FOR_ADAFRUIT_GFX labelFont;    // wqy12 GB2312, transparent; don't change its font
+extern U8G2_FOR_ADAFRUIT_GFX labelFont;    // wqy12 gb2312b (GB2312 level 1 + punctuation), transparent; don't change its font
 extern Session sessions[MAX_SESSIONS];     // in arrival order; positions are stable
 extern uint8_t sessionCount;
 extern uint8_t currentPage;                // the page shown, or being left while slideTo >= 0
