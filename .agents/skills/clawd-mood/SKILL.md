@@ -1,9 +1,9 @@
 ---
 name: clawd-mood
-description: 安装、配置、排查和卸载 clawd-mood（ESP32-C3 + ST7789 桌面小屏，显示 AI 编程 agent 的会话状态）。用户要安装或烧固件、把 Claude Code / Codex / OpenCode / pi / WorkBuddy / DeepSeek Harness / Cursor 接上屏幕、换主题样式、调屏幕方向或亮度、选串口、更新版本、屏幕没反应、或卸载时使用。Use to install, flash, hook up, restyle (theme, rotation, brightness), update, troubleshoot or uninstall the clawd-mood desk screen.
+description: 安装、配置、排查和卸载 MiqiPet（clawd-mood，ESP32-C3 + ST7789 桌面小屏，显示 AI 编程 agent 的会话状态）。用户要安装或烧固件、把 Claude Code / Codex / OpenCode / pi / WorkBuddy / DeepSeek Harness / Cursor 接上屏幕、换主题样式、调屏幕方向或亮度、选串口、更新版本、屏幕没反应、或卸载时使用。Use to install, flash, hook up, restyle (theme, rotation, brightness), update, troubleshoot or uninstall the MiqiPet desk screen.
 ---
 
-# clawd-mood
+# MiqiPet
 
 下面的命令都在 clawd-mood 仓库的根目录执行。按顺序找仓库：
 

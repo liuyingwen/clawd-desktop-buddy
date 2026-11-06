@@ -26,7 +26,7 @@ static const ble_uuid128_t RX_UUID = BLE_UUID128_INIT(
 static StreamBufferHandle_t rx = nullptr;
 static volatile bool connected = false;
 static uint8_t ownAddrType;
-static char name[20];
+static char name[20];  // "MiqiPet-XXXX" and a NUL; older firmware said "clawd-mood-XXXX"
 
 // Without this the core frees the controller's memory at boot, before bleBegin() runs.
 extern "C" bool btInUse() { return true; }
@@ -102,7 +102,9 @@ void bleBegin() {
   if (!rx || nimble_port_init() != ESP_OK) return;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_BT);
-  snprintf(name, sizeof(name), "clawd-mood-%02X%02X", mac[4], mac[5]);  // tell two boards apart
+  // The product name users see in Bluetooth lists, plus two MAC bytes to tell two boards apart.
+  // The daemon derives the same name from the USB serial number; keep the two in step.
+  snprintf(name, sizeof(name), "MiqiPet-%02X%02X", mac[4], mac[5]);
   ble_hs_cfg.sync_cb = onSync;
   ble_svc_gap_init();
   ble_svc_gatt_init();

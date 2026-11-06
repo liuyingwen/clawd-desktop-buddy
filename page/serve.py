@@ -918,7 +918,7 @@ def run_once(args) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="clawd-mood config page")
+    parser = argparse.ArgumentParser(description="MiqiPet config page")
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     parser.add_argument("--port", type=int, default=0, help="TCP port on 127.0.0.1 (default: random)")
     once = parser.add_mutually_exclusive_group()
@@ -942,7 +942,7 @@ def main() -> None:
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}/#token={app.token}"
 
-    print(f"clawd-mood 配置页: {url}", flush=True)
+    print(f"MiqiPet 配置页: {url}", flush=True)
     print("本页 10 分钟无操作后自动关闭。", flush=True)
     threading.Thread(target=watchdog, args=(server, app.life), name="watchdog", daemon=True).start()
     if not args.no_open:
@@ -964,7 +964,7 @@ def main() -> None:
     thread = app.test_thread
     if thread is not None:
         thread.join(TEST_DONE_AFTER_S + TEST_END_AFTER_S + 2)  # do not strand the test creature on screen
-    print(f"clawd-mood 配置页已关闭（{app.life.reason}）。", flush=True)
+    print(f"MiqiPet 配置页已关闭（{app.life.reason}）。", flush=True)
 
 
 if __name__ == "__main__":

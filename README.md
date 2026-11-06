@@ -1,10 +1,10 @@
-# clawd-mood
+# MiqiPet
 
-ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Codex CLI** / **OpenCode** / **pi** / **WorkBuddy** / **DeepSeek Harness** / **Cursor** 的运行状态。每个会话是一只像素小生物，显示会话标题和当前状态；多个 agent 可以同时用。支持 macOS / Linux / Windows。
+MiqiPet（仓库 clawd-mood）是一个 ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Codex CLI** / **OpenCode** / **pi** / **WorkBuddy** / **DeepSeek Harness** / **Cursor** 的运行状态。每个会话是一只像素小生物，显示会话标题和当前状态；多个 agent 可以同时用。支持 macOS / Linux / Windows。
 
 <p align="center">
-  <img src="images/hero.png" width="48%" alt="clawd-mood on a coding desk next to a MacBook, its screen showing four sessions as a squad of pixel creatures" />
-  <img src="images/with-claude-pandas.jpg" width="48%" alt="clawd-mood showing three sessions, flanked by two Claude panda figurines" />
+  <img src="images/hero.png" width="48%" alt="MiqiPet on a coding desk next to a MacBook, its screen showing four sessions as a squad of pixel creatures" />
+  <img src="images/with-claude-pandas.jpg" width="48%" alt="MiqiPet showing three sessions, flanked by two Claude panda figurines" />
 </p>
 
 ## 屏幕样式
@@ -51,12 +51,12 @@ ESP32-C3 + ST7789 1.54" TFT 桌面摆件，实时显示 **Claude Code** / **Code
 npx skills add liuyingwen/clawd-desktop-buddy -g
 ```
 
-再跟 agent 说「帮我安装 clawd-mood」。它会烧录固件、接上插件，最后在屏幕上放一个测试小人让你确认。之后换样式、排查、更新、卸载也都直接跟它说。
+再跟 agent 说「帮我安装 MiqiPet」。它会烧录固件、接上插件，最后在屏幕上放一个测试小人让你确认。之后换样式、排查、更新、卸载也都直接跟它说。
 
 不想装技能，就把这段话发给 agent：
 
 ```text
-请帮我安装 clawd-mood：https://github.com/liuyingwen/clawd-desktop-buddy
+请帮我安装 MiqiPet：https://github.com/liuyingwen/clawd-desktop-buddy
 克隆到 ~/clawd-mood，按 .agents/skills/clawd-mood/SKILL.md 的步骤安装，只接你自己这个 CLI。
 需要我动手的步骤告诉我；需要 sudo 或修改系统配置时先问我。
 ```
@@ -91,7 +91,7 @@ arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed
 arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
 ```
 
-烧不进去：先关掉串口监视器，用过 clawd-mood 的话再停掉后台的 daemon（`pkill -f scripts/daemon.py`）；还不行就按住板子上的 BOOT 键再插 USB，然后重试。
+烧不进去：先关掉串口监视器，用过 MiqiPet 的话再停掉后台的 daemon（`pkill -f scripts/daemon.py`）；还不行就按住板子上的 BOOT 键再插 USB，然后重试。
 
 **2. 接上 agent**：在 [agents.md](.agents/skills/clawd-mood/references/agents.md) 里找到你用的 agent，在仓库目录运行它下面的安装命令。
 
@@ -99,7 +99,7 @@ arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,
 
 ## 换样式
 
-跟 agent 说「把 clawd-mood 换成午夜主题」「屏幕亮度调到 60」「屏幕倒过来了」就行。也可以打开配置页，看着预览自己挑：
+跟 agent 说「把 MiqiPet 换成午夜主题」「屏幕亮度调到 60」「屏幕倒过来了」就行。也可以打开配置页，看着预览自己挑：
 
 ```bash
 uv run page/serve.py

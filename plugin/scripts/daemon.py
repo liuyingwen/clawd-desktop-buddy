@@ -56,13 +56,17 @@ RECONNECT_INTERVAL_S = 3.0
 # SessionStart start a second daemon.
 LISTEN_BACKLOG = 64
 NO_DEVICE_MESSAGE = (
-    "No ESP32-like USB CDC device found and no clawd-mood board over Bluetooth. Plug it in or set "
+    "No ESP32-like USB CDC device found and no MiqiPet board over Bluetooth. Plug it in or set "
     "CLAWD_MOOD_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
 )
 
 # Must match firmware/clawd_mood/ble_link.h.
 BLE_SERVICE_UUID = "ee97aa6d-6973-4f5a-9148-c26f84eb0f84"
 BLE_RX_UUID = "f91d93a9-1bf8-4ae7-b4ac-31fcaa05cebc"
+# What the board advertises: BLE_NAME_PREFIX + two MAC bytes. Boards still on firmware from before
+# the rename advertise the old prefix; ble_name_variants() lets both name the same board.
+BLE_NAME_PREFIX = "MiqiPet-"
+BLE_NAME_PREFIX_OLD = "clawd-mood-"
 BLE_SCAN_S = 10.0
 BLE_RETRY_S = 5.0
 # Lines kept while the board is out of range, flushed in order on reconnect: replaying a
@@ -182,7 +186,20 @@ def ble_name_for(serial_number: Optional[str]) -> Optional[str]:
     if not serial_number or serial_number.count(":") != 5:
         return None
     bt = (mac + 2) & 0xFFFFFFFFFFFF
-    return f"clawd-mood-{(bt >> 8) & 0xFF:02X}{bt & 0xFF:02X}"
+    return f"{BLE_NAME_PREFIX}{(bt >> 8) & 0xFF:02X}{bt & 0xFF:02X}"
+
+
+def ble_name_variants(name: str) -> set:
+    """Every name the same board may advertise: the one given plus its old/new counterpart.
+
+    MiqiPet-AB0A and clawd-mood-AB0A are one board on two firmware versions. boards.json written
+    before the rename, CLAWD_MOOD_BLE_NAME and the config's ble_name may hold either form.
+    """
+    variants = {name}
+    for prefix, other in ((BLE_NAME_PREFIX, BLE_NAME_PREFIX_OLD), (BLE_NAME_PREFIX_OLD, BLE_NAME_PREFIX)):
+        if name.startswith(prefix):
+            variants.add(other + name[len(prefix):])
+    return variants
 
 
 def known_boards() -> list:
@@ -206,7 +223,8 @@ def remember_board(port: str) -> None:
         names = known_boards()
         if name is None or (names and names[0] == name):
             return
-        names = [name] + [n for n in names if n != name][: KNOWN_BOARDS_MAX - 1]
+        # Also drops the same board under its old name, so the file migrates to the new form.
+        names = [name] + [n for n in names if n not in ble_name_variants(name)][: KNOWN_BOARDS_MAX - 1]
         path = boards_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
@@ -273,7 +291,8 @@ class BleLink:
     async def _find(self):
         from bleak import BleakScanner
 
-        wanted = ble_wanted()
+        # Either firmware's name for every wanted board, see ble_name_variants().
+        wanted = {v for n in ble_wanted() for v in ble_name_variants(n)}
 
         def match(device, adv) -> bool:
             if BLE_SERVICE_UUID not in [u.lower() for u in adv.service_uuids]:
