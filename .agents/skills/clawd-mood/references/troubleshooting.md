@@ -38,7 +38,7 @@ Get-Content $env:TEMP\clawd-mood-daemon.log -Tail 50  # Windows
 | 改了插件文件不生效 | Codex、WorkBuddy、DeepSeek 原生插件用的是拷贝，按 [agents.md](agents.md) 的「更新」重装 |
 | Codex 完全没反应 | hook 没信任或更新后信任失效，请用户在 codex 里 `/hooks` 信任；`codex plugin marketplace list` 看 marketplace 是否注册 |
 | OpenCode 没反应 | 版本 ≥ 2.0、软链有效，`opencode reload` |
-| Cursor 没反应 | `--status` 的 `plugins.cursor` 不是 `found` 就重跑 `uv run tools/cursor_hooks.py install`（`hooks.json` 有注释时它不写入，按它打印的内容手动加）；要新开对话才生效。还不行请用户看输出面板的 Hooks 频道：没有 `hook.py` 的记录，检查条目里的路径；有记录但报错，多半是从程序坞启动的 Cursor 找不到 `uv`，从终端用 `cursor` 命令启动。`cursor-agent -p` 本来就只显示 working |
+| Cursor 没反应 | 先看 `--status` 的 `plugins.cursor`（或 `~/.cursor/hooks.json` 里有没有带 `scripts/hook.sh ... cursor` 的条目），不是 `found` 就跑 `uv run tools/cursor_hooks.py install`（`hooks.json` 有注释时它不写入，按它打印的内容手动加）；要新开对话才生效。还不行请用户看输出面板的 Hooks 频道：没有 `hook.sh` 的记录，检查条目里的路径；有记录但报错，多半是从程序坞启动的 Cursor 既找不到 `uv` 也没有可用的 `python3`（macOS 要装 Command Line Tools：`xcode-select --install`），或者从终端用 `cursor` 命令启动。`cursor-agent -p` 本来就只显示 working |
 | DeepSeek Harness 没反应 | 会话要提交过 prompt 才上屏。原生插件确认装在正在用的 profile（桌面版是 `desktop`）；桥接拉不起 daemon，先手动启动，再确认 `configPath` 是绝对路径 |
 
 ## 手动启动 daemon

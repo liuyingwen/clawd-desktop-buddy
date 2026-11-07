@@ -2,72 +2,72 @@
   "hooks": {
     "SessionStart": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "UserPromptSubmit": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PreToolUse": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PostToolUse": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PostToolUseFailure": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PermissionRequest": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "Notification": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PreCompact": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "PostCompact": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "Stop": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "StopFailure": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "SubagentStart": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "SubagentStop": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ],
     "SessionEnd": [
       { "matcher": "", "hooks": [
-        { "type": "command", "command": "uv run \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.py || true", "async": true }
+        { "type": "command", "command": "sh \"$CLAUDE_PLUGIN_ROOT\"/scripts/hook.sh || true", "async": true }
       ]}
     ]
   }

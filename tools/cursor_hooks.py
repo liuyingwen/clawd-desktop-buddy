@@ -11,8 +11,9 @@
 User-level hooks rather than a Cursor plugin: cursor-agent only runs
 beforeSubmitPrompt / stop when user or project hooks define them, so a plugin
 alone never shows thinking or done there. Entries point at this checkout's
-hook.py, so edits take effect without reinstalling; run install again after
-moving the repo. Other tools' entries in the file are left alone.
+hook.sh (hook.py on Windows), so edits take effect without reinstalling; run
+install again after moving the repo. Other tools' entries in the file are left
+alone.
 """
 
 from __future__ import annotations
@@ -30,9 +31,10 @@ EVENTS = [
     "sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse",
     "postToolUseFailure", "preCompact", "stop", "sessionEnd",
 ]
-HOOK = Path(__file__).resolve().parent.parent / "plugin" / "scripts" / "hook.py"
-# Any clawd-mood hook.py run with the cursor argument, wherever the repo was
-OURS = re.compile(r"""scripts/hook\.py['"]? cursor\b""")
+SCRIPTS = Path(__file__).resolve().parent.parent / "plugin" / "scripts"
+HOOK = SCRIPTS / ("hook.py" if sys.platform == "win32" else "hook.sh")
+# Any clawd-mood hook.py / hook.sh run with the cursor argument, wherever the repo was
+OURS = re.compile(r"""scripts/hook\.(?:py|sh)['"]? cursor\b""")
 
 
 def command() -> str:
@@ -40,8 +42,10 @@ def command() -> str:
         # Cursor runs hooks through PowerShell, where `|| true` is a syntax
         # error; uv's exit code 2 doesn't survive powershell -Command anyway.
         return f'uv run "{HOOK}" cursor'
-    # uv exits 2 on its own errors, which Cursor treats as "block the action"
-    return f"uv run {shlex.quote(str(HOOK))} cursor || true"
+    # hook.sh picks uv or python3 (Cursor started from the Dock often has no uv
+    # on PATH) and always exits 0; the `|| true` is belt and braces, since a
+    # non-zero exit is "block the action" to Cursor.
+    return f"sh {shlex.quote(str(HOOK))} cursor || true"
 
 
 def is_ours(entry: object) -> bool:

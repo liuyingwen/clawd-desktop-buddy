@@ -3,6 +3,9 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
+# The 3.12 above is only what `uv run` picks (same as daemon.py); the code itself
+# must stay runnable on Python 3.9: hook.sh falls back to the system python3 and
+# hooks-dsh.json runs `python3 hook.py` directly. No 3.10+ syntax or stdlib here.
 """clawd-mood hook — maps CLI hook events to ESP32 states via TCP.
 
 Receives hook JSON on stdin (from Claude Code / Codex CLI / WorkBuddy /
@@ -10,8 +13,9 @@ DeepSeek Harness / Cursor), looks up the event in EVENT_TO_STATE, then opens a
 short TCP connection to the daemon and sends a single NDJSON line tagged with
 the session it came from. On SessionStart, spawns the daemon detached if it is
 not already running. Pure stdlib (no third-party deps) so uv run is fast
-(~80-200ms cached), and DeepSeek Harness can run it with plain python3 (uv
-cannot init its cache in that sandbox).
+(~80-200ms cached), and it runs on the python3 macOS ships (3.9): hook.sh next
+to this file falls back to that when uv is not on PATH, and DeepSeek Harness
+uses it directly (uv cannot init its cache in that sandbox).
 
 Pass "codex", "dsh" or "cursor" as argv[1] from those hook configs (Cursor's
 entries are written by tools/cursor_hooks.py); otherwise the source is
@@ -33,6 +37,7 @@ from pathlib import Path
 
 PORTFILE = Path(tempfile.gettempdir()) / "clawd-mood.port"
 LOGFILE = Path(tempfile.gettempdir()) / "clawd-mood-daemon.log"
+DAEMON = Path(__file__).parent / "daemon.py"
 
 EVENT_TO_STATE = {
     "SessionStart":       "idle",
@@ -209,16 +214,40 @@ def probe_daemon() -> bool:
         return False
 
 
-def ensure_daemon_running() -> None:
-    if probe_daemon():
-        return
-    daemon_path = Path(__file__).parent / "daemon.py"
-    log_fh = open(LOGFILE, "a")
+def config_path() -> Path:
+    """The shared config file, same rules as daemon.py (which owns the format)."""
+    override = os.environ.get("CLAWD_MOOD_CONFIG")
+    if override:
+        return Path(override)
+    try:
+        import pwd  # $HOME can be replaced (DeepSeek Harness does), so ask the user database first
+        return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".clawd-mood" / "config.json"
+    except (ImportError, KeyError, AttributeError):
+        return Path.home() / ".clawd-mood" / "config.json"
+
+
+def configured_daemon_argv() -> list[str] | None:
+    """`daemon_argv` from the config: how the packaged desktop app wants the daemon started.
+
+    The desktop app writes it only when it runs as a bundle (it has no uv to
+    offer); a dev checkout removes it. Ignored unless argv[0] is an existing
+    file, so a stale path after an uninstall falls back to daemon.py.
+    """
+    try:
+        argv = json.loads(config_path().read_text(encoding="utf-8")).get("daemon_argv")
+        if isinstance(argv, list) and argv and all(isinstance(a, str) for a in argv) and Path(argv[0]).is_file():
+            return argv
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
+def spawn_detached(argv: list[str], log_fh) -> None:
     if sys.platform == "win32":
         CREATE_NO_WINDOW = 0x08000000
         DETACHED_PROCESS = 0x00000008
         subprocess.Popen(
-            ["uv", "run", str(daemon_path)],
+            argv,
             stdout=log_fh,
             stderr=log_fh,
             stdin=subprocess.DEVNULL,
@@ -227,13 +256,37 @@ def ensure_daemon_running() -> None:
         )
     else:
         subprocess.Popen(
-            [str(daemon_path)],
+            argv,
             stdout=log_fh,
             stderr=log_fh,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
             close_fds=True,
         )
+
+
+def ensure_daemon_running() -> None:
+    if probe_daemon():
+        return
+    # Fallback relies on uv: the shebang on POSIX, `uv run` on Windows.
+    fallback = ["uv", "run", str(DAEMON)] if sys.platform == "win32" else [str(DAEMON)]
+    configured = configured_daemon_argv()
+    candidates = [configured, fallback] if configured else [fallback]
+    try:
+        log_fh = open(LOGFILE, "a")
+    except OSError:
+        return
+    with log_fh:
+        for argv in candidates:
+            try:
+                spawn_detached(argv, log_fh)
+                return
+            except OSError as e:  # missing uv, unreadable executable...; never fail the hook
+                try:
+                    log_fh.write(f"hook: could not start daemon with {argv!r}: {e}\n")
+                    log_fh.flush()
+                except OSError:
+                    pass
 
 
 def main() -> None:

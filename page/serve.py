@@ -448,7 +448,7 @@ def plugin_traces() -> dict:
     hooks = home / ".cursor" / "hooks.json"   # written by tools/cursor_hooks.py
     try:
         text = hooks.read_text(encoding="utf-8", errors="replace")
-        cursor = {"state": "found" if re.search(r"hook\.py\W{0,3} cursor\b", text) else "absent", "detail": str(hooks)}
+        cursor = {"state": "found" if re.search(r"hook\.(?:py|sh)\W{0,3} cursor\b", text) else "absent", "detail": str(hooks)}
     except FileNotFoundError:
         cursor = {"state": "absent" if hooks.parent.is_dir() else "unknown", "detail": str(hooks)}
     except OSError:
