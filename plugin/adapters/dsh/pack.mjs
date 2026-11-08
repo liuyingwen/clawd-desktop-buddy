@@ -1,4 +1,4 @@
-// Packs this plugin into the repo's dist/ as clawd-mood-dsh-<version>.tgz. Users install it by pasting
+// Packs this plugin into the repo's dist/ as miqipet-dsh-<version>.tgz. Users install it by pasting
 // its GitHub raw URL into DeepSeek Harness's plugin manager, which hands it to pnpm. pnpm treats new
 // bytes at a URL it already knows as tampering: `pnpm update` refuses, and removing and adding it again
 // fails on the lockfile. So a published version is never overwritten, and a change needs a new version.
@@ -14,7 +14,7 @@ const { name, version } = JSON.parse(readFileSync(join(here, "package.json"), "u
 const file = `${name}-${version}.tgz`;
 const target = join(dist, file);
 
-const scratch = mkdtempSync(join(tmpdir(), "clawd-mood-dsh-pack-"));
+const scratch = mkdtempSync(join(tmpdir(), "miqipet-dsh-pack-"));
 try {
   execFileSync("npm", ["pack", "--pack-destination", scratch], {
     cwd: here, stdio: "inherit", shell: process.platform === "win32",

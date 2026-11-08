@@ -3,7 +3,7 @@
 # requires-python = ">=3.9"
 # dependencies = []
 # ///
-"""Add or remove clawd-mood's hooks in Cursor's user-level hooks.json.
+"""Add or remove MiqiPet's hooks in Cursor's user-level hooks.json.
 
     uv run tools/cursor_hooks.py install      # or: uninstall
     uv run tools/cursor_hooks.py install --file <project>/.cursor/hooks.json
@@ -33,7 +33,7 @@ EVENTS = [
 ]
 SCRIPTS = Path(__file__).resolve().parent.parent / "plugin" / "scripts"
 HOOK = SCRIPTS / ("hook.py" if sys.platform == "win32" else "hook.sh")
-# Any clawd-mood hook.py / hook.sh run with the cursor argument, wherever the repo was
+# Any MiqiPet hook.py / hook.sh run with the cursor argument, wherever the repo was
 OURS = re.compile(r"""scripts/hook\.(?:py|sh)['"]? cursor\b""")
 
 
@@ -96,7 +96,7 @@ def main() -> None:
             hooks.setdefault(event, []).append({"command": command(), "timeout": 5})
     save(args.file, config)
     done = "added" if args.action == "install" else "removed"
-    print(f"clawd-mood hooks {done}: {args.file}")
+    print(f"MiqiPet hooks {done}: {args.file}")
     if args.action == "install":
         print(f"  -> {command()}")
 

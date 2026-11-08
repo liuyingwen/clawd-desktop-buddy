@@ -1,12 +1,14 @@
 {
-  "name": "clawd-mood",
-  "owner": { "name": "liuyingwen" },
+  "name": "miqipet",
+  "owner": {
+    "name": "liuyingwen"
+  },
   "plugins": [
     {
-      "name": "clawd-mood",
-      "description": "Drives a clawd-mood ESP32-C3 desk mascot via USB serial, reflecting WorkBuddy / CodeBuddy Code state on a TFT display.",
+      "name": "miqipet",
+      "description": "MiqiPet: shows each coding session as a desk pet, on the desktop and on the ESP32 desk screen (WorkBuddy / CodeBuddy Code).",
       "source": "./plugin",
-      "version": "0.4.0"
+      "version": "0.5.0"
     }
   ]
 }

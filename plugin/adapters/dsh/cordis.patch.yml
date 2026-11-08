@@ -1,4 +1,4 @@
-# Mount clawd-mood in the host-side DSH runtime.
+# Mount MiqiPet in the host-side DSH runtime.
 - insert:
-    - id: clawd-mood
-      name: clawd-mood-dsh
+    - id: miqipet
+      name: miqipet-dsh

@@ -1,4 +1,4 @@
-// clawd-mood plugin for opencode >= 2.0 — pushes states straight to the daemon over
+// MiqiPet plugin for opencode >= 2.0 — pushes states straight to the daemon over
 // TCP (one uv process per event would lose the last state: `opencode run` exits
 // milliseconds after the turn). hook.py is only used to autostart the daemon.
 // Exports a plain object so it needs no @opencode/plugin install.
@@ -71,7 +71,7 @@ function sendChild(session, type) {
 }
 
 export default {
-  id: "clawd-mood",
+  id: "miqipet",
   async setup(ctx) {
     // Subagents are child sessions in-process; they must not drive the main creature.
     const children = new Set();

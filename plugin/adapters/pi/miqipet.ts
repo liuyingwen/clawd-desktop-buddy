@@ -1,4 +1,4 @@
-// clawd-mood extension for pi — pushes states straight to the daemon over TCP (no
+// MiqiPet extension for pi — pushes states straight to the daemon over TCP (no
 // uv process per event, so order holds and the last state survives a fast exit).
 // hook.py is only used to autostart the daemon.
 

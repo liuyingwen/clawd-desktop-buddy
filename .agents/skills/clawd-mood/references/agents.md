@@ -17,58 +17,58 @@
 
 ```bash
 claude plugin marketplace add ./
-claude plugin install clawd-mood@clawd-mood
+claude plugin install miqipet@miqipet
 ```
 
 之后任意目录跑 `claude` 都会挂上。请用户在 claude 里运行 `/hooks`，确认 14 个事件都在。只想在当前会话临时用：`claude --plugin-dir <repo>/plugin`。
 
-- 更新：`claude plugin marketplace update clawd-mood`，再 uninstall + install（插件版本号不一定变，`claude plugin update` 可能认为已是最新），然后请用户重启 claude。`--plugin-dir` 方式不用更新
-- 卸载：`claude plugin uninstall clawd-mood@clawd-mood && claude plugin marketplace remove clawd-mood`
+- 更新：`claude plugin marketplace update miqipet`，再 uninstall + install（插件版本号不一定变，`claude plugin update` 可能认为已是最新），然后请用户重启 claude。`--plugin-dir` 方式不用更新
+- 卸载：`claude plugin uninstall miqipet@miqipet && claude plugin marketplace remove miqipet`
 
 ## Codex CLI（≥ 0.133.0）
 
 ```bash
 codex plugin marketplace add .
-codex plugin add clawd-mood@clawd-mood
+codex plugin add miqipet@miqipet
 ```
 
-**必须让用户在 codex 里运行 `/hooks`，审阅并信任 clawd-mood 的 12 个事件**，未信任的 hook 不会执行。Codex 对整个插件目录算哈希，插件里任何文件变了都要重新信任。
+**必须让用户在 codex 里运行 `/hooks`，审阅并信任 MiqiPet 的 12 个事件**，未信任的 hook 不会执行。Codex 对整个插件目录算哈希，插件里任何文件变了都要重新信任。
 
-- 更新：`codex plugin remove clawd-mood@clawd-mood && codex plugin add clawd-mood@clawd-mood`，再让用户在 `/hooks` 重新信任（Codex 用的是拷贝，不重装就还是旧版）
-- 卸载：`codex plugin remove clawd-mood@clawd-mood && codex plugin marketplace remove clawd-mood`
+- 更新：`codex plugin remove miqipet@miqipet && codex plugin add miqipet@miqipet`，再让用户在 `/hooks` 重新信任（Codex 用的是拷贝，不重装就还是旧版）
+- 卸载：`codex plugin remove miqipet@miqipet && codex plugin marketplace remove miqipet`
 
 ## OpenCode（≥ 2.0）
 
 ```bash
 mkdir -p ~/.config/opencode/plugins
-ln -s <repo>/plugin/adapters/opencode/clawd-mood.js ~/.config/opencode/plugins/clawd-mood.js
+ln -s <repo>/plugin/adapters/opencode/miqipet.js ~/.config/opencode/plugins/miqipet.js
 opencode reload
 ```
 
 必须是软链，插件靠真实路径找到 `scripts/hook.py`。1.x 不支持。
 
 - 更新：软链指向仓库，`git pull` 后 `opencode reload` 即可
-- 卸载：`rm ~/.config/opencode/plugins/clawd-mood.js`
+- 卸载：`rm ~/.config/opencode/plugins/miqipet.js`
 
 ## pi
 
 ```bash
-pi install <repo>/plugin/adapters/pi/clawd-mood.ts
+pi install <repo>/plugin/adapters/pi/miqipet.ts
 ```
 
-- 卸载：`pi remove <repo>/plugin/adapters/pi/clawd-mood.ts`
+- 卸载：`pi remove <repo>/plugin/adapters/pi/miqipet.ts`
 
 ## WorkBuddy / CodeBuddy Code
 
 ```bash
 codebuddy plugin marketplace add .
-codebuddy plugin install clawd-mood@clawd-mood
+codebuddy plugin install miqipet@miqipet
 ```
 
 WorkBuddy 桌面版：命令前加 `CODEBUDDY_CONFIG_DIR=~/.workbuddy`，装完重启应用。`codebuddy` 在 `/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy`。从访达启动时 PATH 里可能没有 `uv`。
 
-- 更新：uninstall，删掉 `~/.workbuddy/plugins/cache/clawd-mood/clawd-mood/<版本>/`（uninstall 不删它，版本号没变时重装会继续用旧文件），再 install
-- 卸载：`codebuddy plugin uninstall clawd-mood@clawd-mood && codebuddy plugin marketplace remove clawd-mood`
+- 更新：uninstall，删掉 `~/.workbuddy/plugins/cache/miqipet/miqipet/<版本>/`（uninstall 不删它，版本号没变时重装会继续用旧文件），再 install
+- 卸载：`codebuddy plugin uninstall miqipet@miqipet && codebuddy plugin marketplace remove miqipet`
 
 ## DeepSeek Harness
 
@@ -77,17 +77,17 @@ WorkBuddy 桌面版：命令前加 `CODEBUDDY_CONFIG_DIR=~/.workbuddy`，装完�
 **原生插件（推荐，桌面版只能用这种）**：打好的包在仓库的 `dist/` 里，按版本命名，不用自己打包，也不用克隆仓库。把最新版本的 GitHub 地址给用户：
 
 ```
-https://raw.githubusercontent.com/liuyingwen/clawd-desktop-buddy/main/dist/clawd-mood-dsh-0.4.0.tgz
+https://raw.githubusercontent.com/liuyingwen/clawd-desktop-buddy/main/dist/miqipet-dsh-0.5.0.tgz
 ```
 
-版本以仓库 `dist/` 里最新的 `clawd-mood-dsh-<版本>.tgz` 为准（本地有仓库时 `ls <repo>/dist`）。
+版本以仓库 `dist/` 里最新的 `miqipet-dsh-<版本>.tgz` 为准（本地有仓库时 `ls <repo>/dist`）。
 
 - 桌面版：请用户在插件管理里粘贴这个地址安装。`dsh` 命令行不能操作桌面版的 `desktop` profile，只能用户自己点
 - 命令行 / web 版：`dsh plugin --profile web add <上面的地址>`，然后重启 dsh
-- 没网或想用本地文件：填 `<repo>/dist/clawd-mood-dsh-<版本>.tgz` 的绝对路径也行
+- 没网或想用本地文件：填 `<repo>/dist/miqipet-dsh-<版本>.tgz` 的绝对路径也行
 
 - 更新：用新版本的地址再装一次，会替换旧版。不要指望同一个地址自己更新：每个版本的文件发布后不再改，pnpm 也会把同一地址的新内容当成被篡改而拒绝
-- 卸载：桌面版在插件管理里移除；命令行 `dsh plugin --profile web remove clawd-mood-dsh`
+- 卸载：桌面版在插件管理里移除；命令行 `dsh plugin --profile web remove miqipet-dsh`
 
 **hook 桥接（只用于命令行 / web 版）**：
 
@@ -99,7 +99,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 ```yaml
 - insert:
-    - id: clawd-mood-hooks
+    - id: miqipet-hooks
       name: '@deepseek-ai/dsh-hooks-claude-code'
       config:
         configPath: <repo>/plugin/hooks/hooks-dsh.json
@@ -108,7 +108,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-hooks-claude-code@<版本> @deepse
 
 桥接拉不起 daemon，要用户手动启动或先让别的 agent 拉起；会话从第一条 prompt 才上屏。
 
-- 卸载：从 `cordis.patch.yml` 删掉 `clawd-mood-hooks` 这段（别把文件删空，空 patch 会启动失败）
+- 卸载：从 `cordis.patch.yml` 删掉 `miqipet-hooks` 这段（别把文件删空，空 patch 会启动失败）
 
 ## Cursor
 

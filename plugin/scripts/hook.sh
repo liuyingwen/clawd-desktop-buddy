@@ -1,5 +1,5 @@
 #!/bin/sh
-# clawd-mood hook launcher: runs hook.py (next to this file) with whatever
+# MiqiPet hook launcher: runs hook.py (next to this file) with whatever
 # Python is available, forwarding stdin and all arguments.
 #
 #   uv on PATH          -> uv run hook.py "$@"   (fast, cached, the normal case)

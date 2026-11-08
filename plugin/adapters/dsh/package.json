@@ -1,7 +1,7 @@
 {
-  "name": "clawd-mood-dsh",
-  "version": "0.4.0",
-  "description": "clawd-mood for DeepSeek Harness: shows each session as a creature on the ESP32 desk screen",
+  "name": "miqipet-dsh",
+  "version": "0.5.0",
+  "description": "MiqiPet: shows each coding session as a desk pet, on the desktop and on the ESP32 desk screen (DeepSeek Harness)",
   "license": "Apache-2.0",
   "type": "module",
   "main": "index.js",

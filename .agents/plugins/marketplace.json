@@ -1,11 +1,11 @@
 {
-  "name": "clawd-mood",
+  "name": "miqipet",
   "interface": {
-    "displayName": "clawd-mood"
+    "displayName": "MiqiPet"
   },
   "plugins": [
     {
-      "name": "clawd-mood",
+      "name": "miqipet",
       "source": {
         "source": "local",
         "path": "./plugin"

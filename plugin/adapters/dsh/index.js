@@ -1,4 +1,4 @@
-// clawd-mood plugin for DeepSeek Harness — pushes states straight to the daemon
+// MiqiPet plugin for DeepSeek Harness — pushes states straight to the daemon
 // over TCP from inside the host. Unlike the hooks-dsh.json bridge it sees
 // approvals, questions and errors, and it ignores the sessions dsh restores at
 // startup. hook.py is only used to autostart the daemon.
@@ -21,7 +21,7 @@ const PATH = [process.env.PATH, join(homedir(), ".local", "bin"), "/opt/homebrew
 // Approvals answered by policy return at once; only a real wait shows on screen
 const WAIT_DELAY_MS = 400;
 
-export const name = "clawd-mood";
+export const name = "miqipet";
 
 const sha1 = (text) => createHash("sha1").update(text).digest("hex");
 const isSubagent = (agent) => agent.session.header.origin === "subagent";
