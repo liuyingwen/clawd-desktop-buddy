@@ -3,11 +3,11 @@
 # requires-python = ">=3.12"
 # dependencies = ["pyserial>=3.5", "bleak>=1.0"]
 # ///
-"""clawd-mood daemon — TCP server forwarding state to ESP32 via USB CDC.
+"""MiqiPet daemon — TCP server forwarding state to ESP32 via USB CDC.
 
 Replaces the POSIX FIFO (/tmp/clawd-mood.fifo) used in 0.1.x with a TCP
 localhost socket. The actual listening port is written to a portfile at
-<tempdir>/clawd-mood.port so the hook can discover it. Cross-platform:
+<tempdir>/miqipet.port so the hook can discover it. Cross-platform:
 macOS / Linux / Windows.
 
 Survives the board being unplugged: messages are dropped while it is gone, and
@@ -20,7 +20,7 @@ on any charger. See docs/superpowers/specs/2026-11-05-ble-transport-design.md.
 A client whose first line is {"sub":...} stays connected and gets a copy of every
 line, after the latest line of every session and subagent heard from in the last
 30 minutes: anything that wants to see what the board sees can subscribe. With
-CLAWD_MOOD_KEEP_RUNNING=1 the daemon runs without any board, for subscribers.
+MIQIPET_KEEP_RUNNING=1 the daemon runs without any board, for subscribers.
 """
 
 import asyncio
@@ -48,7 +48,7 @@ except ImportError:
 
 BAUD_RATE = 115200
 DEFAULT_TCP_PORT = 48756
-PORTFILE = Path(tempfile.gettempdir()) / "clawd-mood.port"
+PORTFILE = Path(tempfile.gettempdir()) / "miqipet.port"
 ESPRESSIF_VID = 0x303A
 CLIENT_TIMEOUT_S = 0.3  # hooks send right after connecting
 RECONNECT_INTERVAL_S = 3.0
@@ -57,10 +57,10 @@ RECONNECT_INTERVAL_S = 3.0
 LISTEN_BACKLOG = 64
 NO_DEVICE_MESSAGE = (
     "No ESP32-like USB CDC device found and no MiqiPet board over Bluetooth. Plug it in or set "
-    "CLAWD_MOOD_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
+    "MIQIPET_PORT (mac: /dev/cu.xxx, linux: /dev/ttyACM0, windows: COM3)."
 )
 
-# Must match firmware/clawd_mood/ble_link.h.
+# Must match firmware/miqipet/ble_link.h.
 BLE_SERVICE_UUID = "ee97aa6d-6973-4f5a-9148-c26f84eb0f84"
 BLE_RX_UUID = "f91d93a9-1bf8-4ae7-b4ac-31fcaa05cebc"
 # What the board advertises: BLE_NAME_PREFIX + two MAC bytes. Boards still on firmware from before
@@ -91,16 +91,16 @@ def warn_once(message: str) -> None:
 
 
 def config_path() -> Path:
-    override = os.environ.get("CLAWD_MOOD_CONFIG")
+    override = os.environ.get("MIQIPET_CONFIG")
     if override:
         return Path(override)
     # $HOME can be replaced (DeepSeek Harness does), so ask the user database first.
     if pwd is not None:
         try:
-            return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".clawd-mood" / "config.json"
+            return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".miqipet" / "config.json"
         except KeyError:
             pass
-    return Path.home() / ".clawd-mood" / "config.json"
+    return Path.home() / ".miqipet" / "config.json"
 
 
 def configured(key: str) -> Optional[str]:
@@ -148,8 +148,8 @@ def scan_ports(ports: list, espressif_only: bool = False) -> Optional[str]:
 
 
 def detect_port(espressif_only: bool = False) -> Optional[str]:
-    """CLAWD_MOOD_PORT, then the config's serial_port if plugged in, then a scan."""
-    override = os.environ.get("CLAWD_MOOD_PORT")
+    """MIQIPET_PORT, then the config's serial_port if plugged in, then a scan."""
+    override = os.environ.get("MIQIPET_PORT")
     if override:
         return override
     ports = list_ports.comports()
@@ -193,7 +193,7 @@ def ble_name_variants(name: str) -> set:
     """Every name the same board may advertise: the one given plus its old/new counterpart.
 
     MiqiPet-AB0A and clawd-mood-AB0A are one board on two firmware versions. boards.json written
-    before the rename, CLAWD_MOOD_BLE_NAME and the config's ble_name may hold either form.
+    before the rename, MIQIPET_BLE_NAME and the config's ble_name may hold either form.
     """
     variants = {name}
     for prefix, other in ((BLE_NAME_PREFIX, BLE_NAME_PREFIX_OLD), (BLE_NAME_PREFIX_OLD, BLE_NAME_PREFIX)):
@@ -240,12 +240,12 @@ def ble_wanted() -> list:
     Never any board in range: that could be a neighbour's, and scanning for nothing would
     ask macOS users for Bluetooth access they never wanted.
     """
-    pinned = os.environ.get("CLAWD_MOOD_BLE_NAME") or configured("ble_name")
+    pinned = os.environ.get("MIQIPET_BLE_NAME") or configured("ble_name")
     return [pinned] if pinned else known_boards()
 
 
 def ble_enabled() -> bool:
-    if os.environ.get("CLAWD_MOOD_BLE", "1") == "0" or not ble_wanted():
+    if os.environ.get("MIQIPET_BLE", "1") == "0" or not ble_wanted():
         return False
     try:
         import bleak  # noqa: F401  only loaded when there is no board on USB
@@ -553,7 +553,7 @@ def check_singleton() -> None:
         return
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-            sys.exit("Another clawd-mood daemon is already running.")
+            sys.exit("Another MiqiPet daemon is already running.")
     except OSError:
         pass  # stale portfile — take over
 
@@ -586,14 +586,14 @@ def main() -> None:
     install_signal_handlers()
     check_singleton()
 
-    forced = os.environ.get("CLAWD_MOOD_PORT_TCP")
+    forced = os.environ.get("MIQIPET_PORT_TCP")
     preferred = int(forced) if forced else DEFAULT_TCP_PORT
     server, actual_port = bind_listen(preferred, forced is not None)
     PORTFILE.write_text(str(actual_port))
     atexit.register(remove_own_portfile, actual_port)
 
     # Started for a subscriber: no board is fine
-    keep_running = os.environ.get("CLAWD_MOOD_KEEP_RUNNING") == "1"
+    keep_running = os.environ.get("MIQIPET_KEEP_RUNNING") == "1"
     serial_port = detect_port()
     ble = None
     if serial_port is None and ble_enabled():
@@ -609,7 +609,7 @@ def main() -> None:
         link = SerialLink(serial_port, ble)
     except Exception as e:
         sys.exit(f"Cannot open {serial_port}: {e}")
-    print("clawd-mood daemon started")
+    print("MiqiPet daemon started")
     print(f"  TCP:    127.0.0.1:{actual_port}")
     print(f"  Portfile: {PORTFILE}")
     print(f"  Serial: {serial_port or ('none, using Bluetooth' if ble else 'none, subscribers only')}")

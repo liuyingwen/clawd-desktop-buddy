@@ -6,7 +6,7 @@
 # The 3.12 above is only what `uv run` picks (same as daemon.py); the code itself
 # must stay runnable on Python 3.9: hook.sh falls back to the system python3 and
 # hooks-dsh.json runs `python3 hook.py` directly. No 3.10+ syntax or stdlib here.
-"""clawd-mood hook — maps CLI hook events to ESP32 states via TCP.
+"""MiqiPet hook — maps CLI hook events to ESP32 states via TCP.
 
 Receives hook JSON on stdin (from Claude Code / Codex CLI / WorkBuddy /
 DeepSeek Harness / Cursor), looks up the event in EVENT_TO_STATE, then opens a
@@ -35,8 +35,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-PORTFILE = Path(tempfile.gettempdir()) / "clawd-mood.port"
-LOGFILE = Path(tempfile.gettempdir()) / "clawd-mood-daemon.log"
+PORTFILE = Path(tempfile.gettempdir()) / "miqipet.port"
+LOGFILE = Path(tempfile.gettempdir()) / "miqipet-daemon.log"
 DAEMON = Path(__file__).parent / "daemon.py"
 
 EVENT_TO_STATE = {
@@ -153,7 +153,7 @@ def session_fields(payload: dict, source: str) -> dict:
 
 
 def journal_stamp(session: str) -> Path:
-    return Path(tempfile.gettempdir()) / f"clawd-mood-journal-{session}.json"
+    return Path(tempfile.gettempdir()) / f"miqipet-journal-{session}.json"
 
 
 def finished_workflow_agents(payload: dict, session: str) -> list[str]:
@@ -216,14 +216,14 @@ def probe_daemon() -> bool:
 
 def config_path() -> Path:
     """The shared config file, same rules as daemon.py (which owns the format)."""
-    override = os.environ.get("CLAWD_MOOD_CONFIG")
+    override = os.environ.get("MIQIPET_CONFIG")
     if override:
         return Path(override)
     try:
         import pwd  # $HOME can be replaced (DeepSeek Harness does), so ask the user database first
-        return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".clawd-mood" / "config.json"
+        return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".miqipet" / "config.json"
     except (ImportError, KeyError, AttributeError):
-        return Path.home() / ".clawd-mood" / "config.json"
+        return Path.home() / ".miqipet" / "config.json"
 
 
 def configured_daemon_argv() -> list[str] | None:

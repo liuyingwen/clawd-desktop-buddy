@@ -1,4 +1,4 @@
-// clawd-mood config page. Theme, rotation and brightness are staged here and previewed on the
+// MiqiPet config page. Theme, rotation and brightness are staged here and previewed on the
 // stage; "apply" sends them, and each cartridge's own button sends just its theme. The device never
 // answers, so nothing here may claim it changed.
 "use strict";
@@ -20,8 +20,8 @@ const CART_SEND = "应用到屏幕";
 const CART_RESEND = "再发一次";
 // The prebuilt image from GitHub Releases; README's 手动安装 has the same lines and the compile route
 const FLASH_LINES = [
-  "curl -LO https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest/download/clawd-mood-esp32c3.bin",
-  "uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 clawd-mood-esp32c3.bin",
+  "curl -LO https://github.com/liuyingwen/clawd-desktop-buddy/releases/latest/download/miqipet-esp32c3.bin",
+  "uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 miqipet-esp32c3.bin",
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -432,7 +432,7 @@ function paintPortInfo() {
   if (!value) {
     const likely = s.serial.candidates.find((c) => c.likely);
     if (s.serial.env_override) {
-      info.textContent = `${running}自动会选: ${s.serial.env_override}\n来自环境变量 CLAWD_MOOD_PORT`;
+      info.textContent = `${running}自动会选: ${s.serial.env_override}\n来自环境变量 MIQIPET_PORT`;
     } else if (likely) {
       info.textContent = `${running}自动会选: ${portDetail(likely)}`;
     } else {

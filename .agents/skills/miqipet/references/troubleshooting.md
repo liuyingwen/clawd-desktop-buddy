@@ -18,8 +18,8 @@ uv run page/serve.py --status
 细节在 `daemon.alive`、`serial.usb_ok`、`log.errors`。再看 daemon 日志，每个事件应有一行 `-> {"state":...}`：
 
 ```bash
-tail -n 50 ${TMPDIR:-/tmp}/clawd-mood-daemon.log      # mac/linux
-Get-Content $env:TEMP\clawd-mood-daemon.log -Tail 50  # Windows
+tail -n 50 ${TMPDIR:-/tmp}/miqipet-daemon.log      # mac/linux
+Get-Content $env:TEMP\miqipet-daemon.log -Tail 50  # Windows
 ```
 
 日志里有 `->` 行但屏幕没变，问题在设备；没有 `->` 行，问题在 hook 或 daemon。
@@ -31,10 +31,10 @@ Get-Content $env:TEMP\clawd-mood-daemon.log -Tail 50  # Windows
 | 屏幕不亮 | 请用户检查接线，尤其 VCC 是否接 3V3 |
 | 方向不对 | 见 SKILL.md「改设置」里方向的算法 |
 | `No ESP32-like USB CDC device found` | 板子没插好，或数据线只能充电；Linux 检查 dialout 组；Windows 看设备管理器 |
-| 多块板子，daemon 选错了 | 用户在配置页（`uv run page/serve.py`）的「串口设备」里选；或启动 daemon 时设 `CLAWD_MOOD_PORT=/dev/cu.usbmodemXXX`（Windows `COM7`） |
+| 多块板子，daemon 选错了 | 用户在配置页（`uv run page/serve.py`）的「串口设备」里选；或启动 daemon 时设 `MIQIPET_PORT=/dev/cu.usbmodemXXX`（Windows `COM7`） |
 | 拔插 USB 后不更新 | daemon 不退出，下一条消息会触发重连，日志里有 `is back,`。启动时没插设备才会退出 |
 | 设置发了屏幕没变 | 固件可能太旧，重烧后 `uv run page/serve.py --resend`。值没变化时屏幕不提示 |
-| 端口 48756 被占 | daemon 自动换端口并写进 portfile，不用管；要固定端口设 `CLAWD_MOOD_PORT_TCP` |
+| 端口 48756 被占 | daemon 自动换端口并写进 portfile，不用管；要固定端口设 `MIQIPET_PORT_TCP` |
 | 改了插件文件不生效 | Codex、WorkBuddy、DeepSeek 原生插件用的是拷贝，按 [agents.md](agents.md) 的「更新」重装 |
 | Codex 完全没反应 | hook 没信任或更新后信任失效，请用户在 codex 里 `/hooks` 信任；`codex plugin marketplace list` 看 marketplace 是否注册 |
 | OpenCode 没反应 | 版本 ≥ 2.0、软链有效，`opencode reload` |
@@ -50,12 +50,12 @@ uv run plugin/scripts/daemon.py     # 前台运行，看到 Ready! 即就绪
 ## 停掉 daemon
 
 ```bash
-pkill -f scripts/daemon.py; rm -f ${TMPDIR:-/tmp}/clawd-mood.port     # mac/linux
+pkill -f scripts/daemon.py; rm -f ${TMPDIR:-/tmp}/miqipet.port     # mac/linux
 ```
 
 ```powershell
 Get-Process python | Where-Object { $_.CommandLine -like '*daemon.py*' } | Stop-Process
-Remove-Item $env:TEMP\clawd-mood.port -ErrorAction SilentlyContinue
+Remove-Item $env:TEMP\miqipet.port -ErrorAction SilentlyContinue
 ```
 
 下一个 agent 会话开始时，或 `uv run page/serve.py --set/--resend/--test` 时会自动拉起。

@@ -1,15 +1,15 @@
 ---
-name: clawd-mood
-description: 安装、配置、排查和卸载 MiqiPet（clawd-mood，ESP32-C3 + ST7789 桌面小屏，显示 AI 编程 agent 的会话状态）。用户要安装或烧固件、把 Claude Code / Codex / OpenCode / pi / WorkBuddy / DeepSeek Harness / Cursor 接上屏幕、换主题样式、调屏幕方向或亮度、选串口、更新版本、屏幕没反应、或卸载时使用。Use to install, flash, hook up, restyle (theme, rotation, brightness), update, troubleshoot or uninstall the MiqiPet desk screen.
+name: miqipet
+description: 安装、配置、排查和卸载 MiqiPet（ESP32-C3 + ST7789 桌面小屏，显示 AI 编程 agent 的会话状态）。用户要安装或烧固件、把 Claude Code / Codex / OpenCode / pi / WorkBuddy / DeepSeek Harness / Cursor 接上屏幕、换主题样式、调屏幕方向或亮度、选串口、更新版本、屏幕没反应、或卸载时使用。Use to install, flash, hook up, restyle (theme, rotation, brightness), update, troubleshoot or uninstall the MiqiPet desk screen.
 ---
 
 # MiqiPet
 
-下面的命令都在 clawd-mood 仓库的根目录执行。按顺序找仓库：
+下面的命令都在 MiqiPet 仓库（clawd-desktop-buddy）的根目录执行。按顺序找仓库：
 
-1. 本文件往上三级（`.agents/skills/clawd-mood/SKILL.md`）有 `plugin/scripts/daemon.py`，那里就是
-2. `~/clawd-mood`
-3. 问用户是否克隆在别处；没有就 `git clone https://github.com/liuyingwen/clawd-desktop-buddy ~/clawd-mood`
+1. 本文件往上三级（`.agents/skills/miqipet/SKILL.md`）有 `plugin/scripts/daemon.py`，那里就是
+2. `~/miqipet`
+3. 问用户是否克隆在别处；没有就 `git clone https://github.com/liuyingwen/clawd-desktop-buddy ~/miqipet`
 
 插件和 hook 都记着仓库的绝对路径，装好后不要挪动仓库。
 
@@ -58,8 +58,8 @@ description: 安装、配置、排查和卸载 MiqiPet（clawd-mood，ESP32-C3 +
 
 ```bash
 FW=$(git log -1 --format=%H -- firmware/ | cut -c1-7)
-curl -fLO https://github.com/liuyingwen/clawd-desktop-buddy/releases/download/fw-$FW/clawd-mood-esp32c3.bin
-uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 clawd-mood-esp32c3.bin
+curl -fLO https://github.com/liuyingwen/clawd-desktop-buddy/releases/download/fw-$FW/miqipet-esp32c3.bin
+uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write-flash 0x0 miqipet-esp32c3.bin
 ```
 
 - Windows PowerShell：`$FW = (git log -1 --format=%H -- firmware/).Substring(0,7)`，下载用 `curl.exe`
@@ -70,14 +70,14 @@ uvx --no-build-package cryptography esptool --chip esp32c3 --port <串口> write
 
 #### 从源码编译
 
-先装 arduino-cli（macOS `brew install arduino-cli`，Linux `sudo apt install arduino-cli` 或 `sudo pacman -S arduino-cli`，Windows `winget install ArduinoSA.CLI`）。ESP32 板支持包要下载几个 GB，先告诉用户。接线不同的话，先改 `firmware/clawd_mood/clawd_mood.ino` 开头的 `TFT_*` 引脚和 `SPI.begin(8, -1, 10, TFT_CS)`（SCK、MOSI）。
+先装 arduino-cli（macOS `brew install arduino-cli`，Linux `sudo apt install arduino-cli` 或 `sudo pacman -S arduino-cli`，Windows `winget install ArduinoSA.CLI`）。ESP32 板支持包要下载几个 GB，先告诉用户。接线不同的话，先改 `firmware/miqipet/miqipet.ino` 开头的 `TFT_*` 引脚和 `SPI.begin(8, -1, 10, TFT_CS)`（SCK、MOSI）。
 
 ```bash
 arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 arduino-cli lib install "Adafruit GFX Library" "Adafruit ST7735 and ST7789 Library" "ArduinoJson" "U8g2_for_Adafruit_GFX"
-arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
-arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/clawd_mood
+arduino-cli compile -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/miqipet
+arduino-cli upload -p <串口> -b esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600 firmware/miqipet
 ```
 
 上传前同样要停掉 daemon，失败时的处理同上。编译出了问题，可以对照 `.github/workflows/firmware.yml` 里 CI 用的板支持包和库版本。这种方式不清设置，不用 `--resend`。
@@ -134,5 +134,5 @@ uv run page/serve.py --status                        # 当前保存的值在 las
 1. 记下当前版本 `OLD=$(git rev-parse HEAD)`，再 `git pull`
 2. 停掉 daemon（`pkill -f scripts/daemon.py`）。`git diff --quiet $OLD HEAD -- firmware/` 不为 0（固件有改动）时按[烧固件](#3-烧固件)重烧。然后 `uv run page/serve.py --resend`，会拉起新版 daemon 并重发设置
 3. 按 [references/agents.md](references/agents.md) 里各 agent 的「更新」刷新插件。Codex 改了任何插件文件都要重新信任 hook，否则屏幕没反应
-4. 本技能装在用户级目录的话，`npx skills update clawd-mood -g -y` 更新技能本身
+4. 本技能装在用户级目录的话，`npx skills update miqipet -g -y` 更新技能本身
 5. 最后请用户重启各 agent（你自己的会话也一样，所以这步交给用户）

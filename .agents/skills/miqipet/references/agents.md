@@ -123,4 +123,4 @@ uv run tools/cursor_hooks.py install
 - 更新：再跑一次 `uv run tools/cursor_hooks.py install`（可重复执行，事件列表变了也能补上）
 - 卸载：`uv run tools/cursor_hooks.py uninstall`
 
-全部卸载后，按 [troubleshooting.md](troubleshooting.md#停掉-daemon) 停掉 daemon。本技能也要删的话：`npx skills remove --global clawd-mood`。
+全部卸载后，按 [troubleshooting.md](troubleshooting.md#停掉-daemon) 停掉 daemon。本技能也要删的话：`npx skills remove --global miqipet`。

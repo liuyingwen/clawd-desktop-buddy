@@ -1,6 +1,6 @@
 # Builds the firmware and publishes it as a GitHub Release whenever firmware/ changes on main.
 # The tag is fw-<first 7 characters of the last commit that touched firmware/>, so any checkout can
-# download the firmware that matches it (see .agents/skills/clawd-mood/SKILL.md).
+# download the firmware that matches it (see .agents/skills/miqipet/SKILL.md).
 name: firmware
 
 on:
@@ -24,7 +24,7 @@ env:
   ESP32_CORE: "3.3.10"
   ESP32_INDEX: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
   FQBN: esp32:esp32:esp32c3:CDCOnBoot=cdc,CPUFreq=160,UploadSpeed=921600
-  ASSET: clawd-mood-esp32c3.bin
+  ASSET: miqipet-esp32c3.bin
 
 jobs:
   release:
@@ -53,7 +53,7 @@ jobs:
             "U8g2_for_Adafruit_GFX@1.8.0"
 
       - name: Compile
-        run: arduino-cli compile --fqbn "$FQBN" --output-dir build firmware/clawd_mood
+        run: arduino-cli compile --fqbn "$FQBN" --output-dir build firmware/miqipet
 
       # The merged image holds bootloader, partition table and app, padded to the whole 4 MB flash,
       # so it is written at 0x0. It also erases the settings the board saved (NVS).
@@ -63,7 +63,7 @@ jobs:
         run: |
           sha=$(git log -1 --format=%H -- firmware/)
           tag="fw-${sha:0:7}"
-          cp build/clawd_mood.ino.merged.bin "$ASSET"
+          cp build/miqipet.ino.merged.bin "$ASSET"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             # A rerun, or only this workflow changed: same firmware source, rebuilt

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(realpathSync(fileURLToPath(import.meta.url)));
 // Packed tarballs carry their own copy; a linked checkout uses the repo's
 const HOOK_PY = [join(HERE, "scripts", "hook.py"), join(HERE, "..", "..", "scripts", "hook.py")].find(existsSync);
-const PORTFILE = join(tmpdir(), "clawd-mood.port");
+const PORTFILE = join(tmpdir(), "miqipet.port");
 // The desktop app starts from Finder with a bare PATH, so uv must be findable
 const PATH = [process.env.PATH, join(homedir(), ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"]
   .filter(Boolean).join(delimiter);

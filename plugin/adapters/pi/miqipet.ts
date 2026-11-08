@@ -10,7 +10,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOOK_PY = join(dirname(realpathSync(fileURLToPath(import.meta.url))), "..", "..", "scripts", "hook.py");
-const PORTFILE = join(tmpdir(), "clawd-mood.port");
+const PORTFILE = join(tmpdir(), "miqipet.port");
 let identity: Record<string, string> = { session: `pi${process.pid}`.slice(0, 8), name: basename(process.cwd()).slice(0, 16), src: "PI" };
 
 function send(state: string, event: string, tool = "", extra: object = {}): Promise<void> {
@@ -60,9 +60,9 @@ function follower(pi: any, owner: string): void {
 export default function (pi: any): void {
   // Subagents are pi child processes that load this extension too; only the
   // top-level process drives the main creature, the rest show as its followers.
-  const owner = process.env.CLAWD_MOOD_PI_OWNER;
+  const owner = process.env.MIQIPET_PI_OWNER;
   if (owner && owner !== String(process.pid)) return follower(pi, owner);
-  process.env.CLAWD_MOOD_PI_OWNER = String(process.pid);
+  process.env.MIQIPET_PI_OWNER = String(process.pid);
 
   let running = false;
   let failed = false;

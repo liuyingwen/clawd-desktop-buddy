@@ -1,5 +1,5 @@
 /*
- * clawd-mood — ESP32-C3 Super Mini + ST7789 1.54" 240x240
+ * MiqiPet — ESP32-C3 Super Mini + ST7789 1.54" 240x240
  *
  * Desktop squad: every CLI session is a pixel creature with a name and a
  * state. A theme sets how many share a page (4 by default, filling the
@@ -381,7 +381,7 @@ void handleLine(const char* line) {
   bool gone = doc["gone"] | false;
   int8_t i = findSession(id);
   if (i < 0 && gone) return;  // don't bring back an expired session just to say goodbye
-  if (i < 0) i = addSession(id, doc["name"] | "clawd", doc["src"] | "");
+  if (i < 0) i = addSession(id, doc["name"] | "miqipet", doc["src"] | "");
   if (i < 0) return;
   Session& s = sessions[i];
   const char* name = doc["name"];

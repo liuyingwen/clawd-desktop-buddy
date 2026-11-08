@@ -11,7 +11,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOOK_PY = join(dirname(realpathSync(fileURLToPath(import.meta.url))), "..", "..", "scripts", "hook.py");
-const PORTFILE = join(tmpdir(), "clawd-mood.port");
+const PORTFILE = join(tmpdir(), "miqipet.port");
 // One creature per process; child sessions show as followers above it.
 const IDENTITY = { session: `oc${process.pid}`.slice(0, 8), name: basename(process.cwd()).slice(0, 16), src: "OC" };
 

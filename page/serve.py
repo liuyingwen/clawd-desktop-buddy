@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["pyserial>=3.5"]
 # ///
-"""clawd-mood config page — a local server for page/ that talks to the daemon.
+"""MiqiPet config page — a local server for page/ that talks to the daemon.
 
     uv run page/serve.py [--no-open] [--port N]
     uv run page/serve.py --set theme=2 brightness=60   # or --resend, --test, --status: one action, no page
@@ -44,8 +44,8 @@ from serial.tools import list_ports
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DAEMON = ROOT / "plugin" / "scripts" / "daemon.py"
-PORTFILE = Path(tempfile.gettempdir()) / "clawd-mood.port"
-LOGFILE = Path(tempfile.gettempdir()) / "clawd-mood-daemon.log"
+PORTFILE = Path(tempfile.gettempdir()) / "miqipet.port"
+LOGFILE = Path(tempfile.gettempdir()) / "miqipet-daemon.log"
 
 IDLE_LIMIT_S = 10 * 60
 HARD_LIMIT_S = 60 * 60
@@ -93,8 +93,8 @@ def real_home() -> Path:
 
 
 def config_path() -> Path:
-    override = os.environ.get("CLAWD_MOOD_CONFIG")
-    return Path(override) if override else real_home() / ".clawd-mood" / "config.json"
+    override = os.environ.get("MIQIPET_CONFIG")
+    return Path(override) if override else real_home() / ".miqipet" / "config.json"
 
 
 def valid_cfg_value(key: str, value) -> bool:
@@ -243,7 +243,7 @@ EXPLAIN = {
     "send_failed": "第一处断点：后台。连不上后台的 TCP 端口。",
     "old_stuck": "第一处断点：后台。旧的后台进程没有退出，新设置没有用上。",
     "old_unknown": "第一处断点：后台。找不到旧的后台进程，没法重启它，请手动重启。",
-    "not_daemon": "第一处断点：后台。端口文件指向的进程不是 clawd-mood 后台，可能是残留的端口文件。",
+    "not_daemon": "第一处断点：后台。端口文件指向的进程不是 MiqiPet 后台，可能是残留的端口文件。",
 }
 
 # The script itself, wherever the plugin was copied to, not any file whose name ends in daemon.py.
@@ -493,8 +493,8 @@ def serial_candidates() -> list[dict]:
 
 
 def env_port_present(candidates: list[dict]) -> bool:
-    """CLAWD_MOOD_PORT is used as given, so it only counts when that port exists."""
-    value = os.environ.get("CLAWD_MOOD_PORT")
+    """MIQIPET_PORT is used as given, so it only counts when that port exists."""
+    value = os.environ.get("MIQIPET_PORT")
     if not value:
         return False
     if sys.platform == "win32":
@@ -542,7 +542,7 @@ def build_status(life: "Lifetime") -> dict:
         "serial": {
             "candidates": candidates,
             "configured": configured,
-            "env_override": os.environ.get("CLAWD_MOOD_PORT") or None,
+            "env_override": os.environ.get("MIQIPET_PORT") or None,
             "usb_ok": usb_ok,
         },
         "log": {"path": str(LOGFILE), "errors": recent_log_errors()},
@@ -745,7 +745,7 @@ class App:
 # ── HTTP ─────────────────────────────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "clawd-mood"
+    server_version = "miqipet"
     sys_version = ""
     timeout = HANDLER_TIMEOUT_S
 
