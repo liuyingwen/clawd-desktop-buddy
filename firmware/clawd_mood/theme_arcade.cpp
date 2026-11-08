@@ -205,9 +205,10 @@ static void eye(const Skin& k, int16_t ex, int16_t ey, uint8_t u, EyeMode m, uin
 }
 
 // A standing invader, torso top-left at (bx, by). legs: 0 straight, 1 splayed (the second march frame).
-// armL/armR: the arm's top row. shimmer: the torso row where a cyan band starts, -1 for none.
+// armL/armR: the arm's top row. look/lookY: the eyes' offset in pixels. shimmer: the torso row where
+// a cyan band starts, -1 for none.
 static void body(const Skin& k, const Paint& p, int16_t bx, int16_t by, uint8_t u, uint8_t legs,
-                 int8_t armL, int8_t armR, EyeMode eyes, int16_t look, int8_t shimmer) {
+                 int8_t armL, int8_t armR, EyeMode eyes, int16_t look, int16_t lookY, int8_t shimmer) {
   int16_t legY = by + 7 * u;
   int16_t lx = bx + k.legL * u, rx = bx + k.legR * u, lw = k.legW * u;
   if (legs) {           // upper half straight, feet kicked outwards
@@ -225,7 +226,7 @@ static void body(const Skin& k, const Paint& p, int16_t bx, int16_t by, uint8_t 
   if (k.knotHat) knot(bx + 6 * u - 5 * u / 2, by - 4 * u, 5 * u, p.hat);
   if (k.armL >= 0) canvas.fillRect(bx + k.armL * u, by + armL * u, u, 2 * u, p.body);
   if (k.armR >= 0) canvas.fillRect(bx + k.armR * u, by + armR * u, u, 2 * u, p.body);
-  int16_t ey = by + k.eyeY * u;
+  int16_t ey = by + k.eyeY * u + lookY;
   eye(k, bx + k.eyeL * u + look, ey, u, eyes, p.eye);
   if (k.eyeR >= 0) eye(k, bx + k.eyeR * u + look, ey, u, eyes, p.eye);
 }
@@ -271,7 +272,7 @@ static Placed agent(const char* src, uint8_t color, Mood m, unsigned long since,
   int16_t dx = 0, dy = 0;
   uint8_t legs = 0;
   int8_t armL = 3, armR = 3, shimmer = -1;
-  int16_t look = 0;
+  int16_t look = 0, lookY = 0;
   EyeMode eyes = EYE_OPEN;
   uint16_t tint = 0;
   switch (m) {
@@ -326,9 +327,13 @@ static Placed agent(const char* src, uint8_t color, Mood m, unsigned long since,
     }
     default: break;
   }
+  if (eyes == EYE_OPEN && (gaze.x || gaze.y)) {   // the host's gaze (the desktop pet) beats thinking's look-around
+    look = gaze.x * max(1, u / 2);
+    lookY = gaze.y * max(1, u / 2);
+  }
   Paint p = paintOf(src, color, tint);
   int16_t bx = x + dx, by = feet - 9 * u + dy;
-  body(k, p, bx, by, u, legs, armL, armR, eyes, look, shimmer);
+  body(k, p, bx, by, u, legs, armL, armR, eyes, look, lookY, shimmer);
 
   int16_t cx = bx + 6 * u, cy = by + 4 * u;
   if (m == MOOD_ERROR) {   // an explosion: 8 rays of two cells flying out, every 800 ms
@@ -578,7 +583,7 @@ static void attract(unsigned long now) {
     const Skin& k = T->skins[i];
     int16_t x = (i * spacing + shift) % (SKIN_COUNT * spacing) - spacing + 6;
     Paint p = paintOf(k.src, 0, 0);
-    body(k, p, x, feet - 9 * u, u, legs, legs ? 2 : 4, legs ? 4 : 2, EYE_OPEN, 0, -1);
+    body(k, p, x, feet - 9 * u, u, legs, legs ? 2 : 4, legs ? 4 : 2, EYE_OPEN, 0, 0, -1);
   }
   if ((now / 600) % 2 == 0) textAt("INSERT AGENT", 49, 158, 2, YELLOW);
   ship(DISP_W / 2);
@@ -601,8 +606,8 @@ static void toast(const char* text, unsigned long now) {
     const Skin& k = T->skins[0];
     Paint p = paintOf(k.src, 0, 0);
     uint8_t legs = (now / 300) % 2;
-    body(k, p, room / 2 - 6, y + 11, 1, legs, 3, 3, EYE_OPEN, 0, -1);
-    body(k, p, DISP_W - room / 2 - 6, y + 11, 1, !legs, 3, 3, EYE_OPEN, 0, -1);
+    body(k, p, room / 2 - 6, y + 11, 1, legs, 3, 3, EYE_OPEN, 0, 0, -1);
+    body(k, p, DISP_W - room / 2 - 6, y + 11, 1, !legs, 3, 3, EYE_OPEN, 0, 0, -1);
   }
 }
 

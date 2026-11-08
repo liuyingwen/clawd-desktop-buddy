@@ -58,6 +58,7 @@ uint8_t nextColor = 0;
 uint8_t currentPage = 0;
 int8_t slideTo = -1;                // target page while sliding, -1 = not sliding
 unsigned long slideStartMs = 0;
+Gaze gaze = {0, 0};                 // the desktop pet's host sets it; on the board it stays (0, 0)
 unsigned long lastPageMs = 0;
 char urgentId[9] = "";              // session the screen is holding on
 unsigned long urgentUntilMs = 0;
@@ -606,10 +607,15 @@ void drawCreature(const char* src, uint8_t color, Mood mood, unsigned long since
   if (k.armL >= 0) canvas.fillRect(bx + k.armL * u, by + lArm * u, u, 2 * u, body);
   if (k.armR >= 0) canvas.fillRect(bx + k.armR * u, by + rArm * u, u, 2 * u, body);
 
-  // Eyes: thinking looks around
+  // Eyes: thinking looks around; a gaze from the host (the desktop pet following the mouse) wins
+  // while there is one. Happy and X eyes are shapes, not eyes, and stay put.
   const int8_t look[] = {0, -1, 1, 0};
-  int16_t e = mood == MOOD_THINKING ? look[(now / 600) % 4] * max(u / 2, 1) : 0;
-  int16_t ly = by + k.eyeY * u, lx = bx + k.eyeL * u + e;
+  int16_t step = max(u / 2, 1), e = 0, ev = 0;
+  if (mood != MOOD_DONE && mood != MOOD_ERROR) {
+    if (gaze.x || gaze.y) { e = gaze.x * step; ev = gaze.y * step; }
+    else if (mood == MOOD_THINKING) e = look[(now / 600) % 4] * step;
+  }
+  int16_t ly = by + k.eyeY * u + ev, lx = bx + k.eyeL * u + e;
   drawEye(k, lx, ly, u, mood, now);
   if (k.eyeR >= 0) drawEye(k, bx + k.eyeR * u + e, ly, u, mood, now);
 

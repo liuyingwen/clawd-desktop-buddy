@@ -155,6 +155,13 @@ extern uint8_t currentPage;                // the page shown, or being left whil
 extern int8_t slideTo;                     // the page being changed to, -1 when no page change is on
 extern unsigned long slideStartMs;         // when the page change began
 
+// Where the squad looks: -1, 0 or 1 on each axis, (0, 0) straight ahead; y grows downwards. The
+// board never changes it (its eyes look ahead, or wander on their own). The desktop pet's host
+// feeds the mouse's direction in (clawd_gaze in the wasm shim), and creatures that can look
+// (open eyes, awake) shift their eyes that way; a non-zero gaze replaces thinking's look-around.
+struct Gaze { int8_t x, y; };
+extern Gaze gaze;
+
 inline bool isUrgent(Mood m) { return m == MOOD_WAITING || m == MOOD_ERROR; }   // waiting or error
 bool isAlerting(const Session& s);         // urgent and not quiet: the states that jump pages and blink the pager
 int8_t heldUrgent(unsigned long now);      // index of the urgent session the screen is holding on, -1 if none
