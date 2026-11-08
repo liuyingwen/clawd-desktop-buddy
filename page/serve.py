@@ -431,8 +431,8 @@ def plugin_traces() -> dict:
 
     def cache_trace(root: Path) -> dict:
         try:
-            cache = root / "plugins" / "cache" / "clawd-mood"
-            if cache.is_dir():
+            cache = root / "plugins" / "cache" / "miqipet"
+            if cache.is_dir() or (root / "plugins" / "cache" / "clawd-mood").is_dir():   # 0.4.0 and before
                 return {"state": "found", "detail": str(cache)}
             return {"state": "absent" if root.is_dir() else "unknown", "detail": str(cache)}
         except OSError as e:
@@ -440,7 +440,8 @@ def plugin_traces() -> dict:
 
     listed = home / ".claude" / "plugins" / "installed_plugins.json"
     try:
-        found = "clawd-mood" in listed.read_text(encoding="utf-8", errors="replace")
+        text = listed.read_text(encoding="utf-8", errors="replace")
+        found = "miqipet" in text or "clawd-mood" in text   # the plugin's name since 0.5.0, and before
         # --plugin-dir leaves no trace, so not being listed does not mean not installed
         claude = {"state": "found" if found else "unknown", "detail": str(listed)}
     except OSError:
