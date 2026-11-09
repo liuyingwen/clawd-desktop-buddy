@@ -1,6 +1,6 @@
 {
   "name": "miqipet-dsh",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MiqiPet: shows each coding session as a desk pet, on the desktop and on the ESP32 desk screen (DeepSeek Harness)",
   "license": "Apache-2.0",
   "type": "module",

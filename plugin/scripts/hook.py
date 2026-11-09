@@ -152,6 +152,37 @@ def session_fields(payload: dict, source: str) -> dict:
     return fields
 
 
+# macOS puts the bundle id of the app a process tree was launched from in the environment; the
+# desktop pet uses it to bring that terminal / IDE back when a creature is clicked. Without it,
+# TERM_PROGRAM names the terminal (Apple_Terminal, iTerm.app, vscode, WezTerm, ghostty, tmux...).
+def desktop_fields(payload: dict, source: str) -> dict:
+    """Where the session lives, for the desktop pet only ("x": the daemon strips it before the board,
+    so the board's 320-byte lines stay as they were). cwd: the full working directory; pid: the
+    CLI's process; term: the app the session runs in (a macOS bundle id, else TERM_PROGRAM);
+    tty / iterm: the tab, for Terminal.app (its tty) and iTerm2 (ITERM_SESSION_ID)."""
+    env = os.environ
+    if source == "cursor":
+        roots = payload.get("workspace_roots") or []
+        cwd = (roots[0] if roots else "") or env.get("CURSOR_PROJECT_DIR") or os.getcwd()
+    else:
+        cwd = payload.get("cwd") or os.getcwd()
+    x = {"cwd": cwd, "pid": os.getppid()}
+    term = env.get("__CFBundleIdentifier") or env.get("TERM_PROGRAM") or ("windows-terminal" if env.get("WT_SESSION") else "")
+    if term:
+        x["term"] = term[:64]
+    if env.get("ITERM_SESSION_ID"):
+        x["iterm"] = env["ITERM_SESSION_ID"][:64]
+    elif term in ("com.apple.Terminal", "Apple_Terminal"):
+        # Terminal.app's tabs are told apart by tty; the hook's stdin is a pipe, so ask ps for the CLI's
+        try:
+            out = subprocess.run(["ps", "-o", "tty=", "-p", str(os.getppid())], capture_output=True, text=True, timeout=1).stdout.strip()
+            if out and out not in ("?", "??"):
+                x["tty"] = "/dev/" + out
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return x
+
+
 def journal_stamp(session: str) -> Path:
     return Path(tempfile.gettempdir()) / f"miqipet-journal-{session}.json"
 
@@ -327,6 +358,8 @@ def main() -> None:
     if port is None:
         return  # daemon still warming up; next event will catch up
     message = {"state": state, "event": event, "tool": tool, **session_fields(payload, source)}
+    if not agent_id:
+        message["x"] = desktop_fields(payload, source)   # the desktop pet's; the daemon keeps it from the board
     if event == "SessionEnd":
         message["end"] = True
     if agent_id:

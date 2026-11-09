@@ -77,7 +77,7 @@ WorkBuddy 桌面版：命令前加 `CODEBUDDY_CONFIG_DIR=~/.workbuddy`，装完�
 **原生插件（推荐，桌面版只能用这种）**：打好的包在仓库的 `dist/` 里，按版本命名，不用自己打包，也不用克隆仓库。把最新版本的 GitHub 地址给用户：
 
 ```
-https://raw.githubusercontent.com/liuyingwen/clawd-desktop-buddy/main/dist/miqipet-dsh-0.5.0.tgz
+https://raw.githubusercontent.com/liuyingwen/clawd-desktop-buddy/main/dist/miqipet-dsh-0.5.1.tgz
 ```
 
 版本以仓库 `dist/` 里最新的 `miqipet-dsh-<版本>.tgz` 为准（本地有仓库时 `ls <repo>/dist`）。

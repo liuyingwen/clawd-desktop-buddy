@@ -18,7 +18,7 @@ With no board on USB it falls back to Bluetooth LE (bleak), so the board can sit
 on any charger. See docs/superpowers/specs/2026-11-05-ble-transport-design.md.
 
 A client whose first line is {"sub":...} stays connected and gets a copy of every
-line, after the latest line of every session and subagent heard from in the last
+line (with "x", the desktop fields the board never sees), after the latest line of every session and subagent heard from in the last
 30 minutes: anything that wants to see what the board sees can subscribe. With
 MIQIPET_KEEP_RUNNING=1 the daemon runs without any board, for subscribers.
 """
@@ -515,6 +515,15 @@ class Subscribers:
         return False
 
 
+def for_board(line: str, obj) -> str:
+    """The line as the board gets it: without "x", the desktop pet's fields (hook.py's
+    desktop_fields: working directory, terminal), which would push a line over the firmware's
+    320-byte LINE_MAX. Lines without it are forwarded byte for byte."""
+    if not isinstance(obj, dict) or "x" not in obj:
+        return line
+    return json.dumps({k: v for k, v in obj.items() if k != "x"}, ensure_ascii=False, separators=(",", ":"))
+
+
 def is_subscription(line: str) -> bool:
     try:
         obj = json.loads(line)
@@ -636,7 +645,7 @@ def main() -> None:
                     print(f"  !! bad JSON: {line}", file=sys.stderr)
                     continue
                 subscribers.broadcast(line, obj)
-                link.forward(line)
+                link.forward(for_board(line, obj))
 
 
 if __name__ == "__main__":
